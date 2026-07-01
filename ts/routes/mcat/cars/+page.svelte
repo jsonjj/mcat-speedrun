@@ -15,7 +15,13 @@ rate yourself on. Responses + self-rating are stored (AI-ready) for later.
 
     import { postJson } from "../lib/api";
     import { playStart } from "../lib/sound";
-    import type { CarsPassage, CarsResponse } from "../lib/types";
+    import type {
+        CarsDebateReply,
+        CarsDebateResponse,
+        CarsPassage,
+        CarsResponse,
+        Profile,
+    } from "../lib/types";
 
     let passage: CarsPassage | null = null;
     let rubric: string[] = [];
@@ -27,6 +33,50 @@ rate yourself on. Responses + self-rating are stored (AI-ready) for later.
     let saving = false;
     let blockId: string | null = null;
     let fromRoadmap = false;
+
+    // AI debate mode.
+    let aiEnabled = false;
+    type Turn = { role: "student" | "author"; content: string; critique?: string; skill?: string };
+    let debate: Turn[] = [];
+    let debateInput = "";
+    let debateBusy = false;
+    let debateError = "";
+
+    async function sendDebate(): Promise<void> {
+        const msg = debateInput.trim();
+        if (!msg || !passage || debateBusy) {
+            return;
+        }
+        debateBusy = true;
+        debateError = "";
+        debate = [...debate, { role: "student", content: msg }];
+        debateInput = "";
+        try {
+            const history = debate.map((t) => ({
+                role: t.role === "author" ? "author" : "student",
+                content: t.content,
+            }));
+            const resp = await postJson<CarsDebateResponse>("mcatCarsDebate", {
+                passage: passage.passage,
+                author_claim: passage.author_claim,
+                history,
+                student_message: msg,
+            });
+            const r: CarsDebateReply | null = resp.reply;
+            if (r) {
+                debate = [
+                    ...debate,
+                    { role: "author", content: r.reply, critique: r.critique, skill: r.skill },
+                ];
+            } else {
+                debateError = "The author is thinking… try again in a moment.";
+            }
+        } catch {
+            debateError = "Couldn't reach your coach. Check your connection.";
+        } finally {
+            debateBusy = false;
+        }
+    }
 
     const verdicts = [
         { key: "stronger", label: "Stronger" },
@@ -79,9 +129,12 @@ rate yourself on. Responses + self-rating are stored (AI-ready) for later.
         saving = true;
         try {
             const missTypes = rubric.filter((_r, i) => !rubricChecks[i]);
+            const payloadResponses = aiEnabled
+                ? { debate: debate.map((t) => `${t.role}: ${t.content}`).join("\n") }
+                : responses;
             await postJson("mcatSubmitCars", {
                 note_id: passage.note_id,
-                responses,
+                responses: payloadResponses,
                 verdict: verdict || null,
                 miss_types: missTypes,
             });
@@ -94,9 +147,15 @@ rate yourself on. Responses + self-rating are stored (AI-ready) for later.
         }
     }
 
-    onMount(() => {
+    onMount(async () => {
         blockId = $page.url.searchParams.get("block");
         fromRoadmap = $page.url.searchParams.get("from") === "roadmap";
+        try {
+            const p = await postJson<{ profile: Profile }>("mcatGetProfile");
+            aiEnabled = p.profile.ai_enabled ?? false;
+        } catch {
+            aiEnabled = false;
+        }
         load();
         playStart("cars");
     });
@@ -130,7 +189,85 @@ rate yourself on. Responses + self-rating are stored (AI-ready) for later.
             <p class="passage-text">{passage.passage}</p>
         </div>
 
-        {#if !revealed}
+        {#if aiEnabled}
+            <div class="mcat-card debate-intro">
+                <div class="feedback-title">Debate the author</div>
+                <p class="mcat-muted">
+                    The author will defend their claim using the passage. Challenge
+                    it, defend it, stress-test it — argue in your own words.
+                </p>
+                <p class="author-claim"><strong>Author's claim:</strong> {passage.author_claim}</p>
+            </div>
+
+            <div class="debate">
+                {#each debate as turn, i (i)}
+                    <div class="turn turn-{turn.role}">
+                        <div class="turn-who">
+                            {turn.role === "author" ? "Author" : "You"}
+                        </div>
+                        <p class="turn-text">{turn.content}</p>
+                        {#if turn.critique}
+                            <div class="turn-critique">
+                                <span class="crit-tag">Coach</span>
+                                {turn.critique}
+                                {#if turn.skill}<span class="skill-chip">{turn.skill}</span>{/if}
+                            </div>
+                        {/if}
+                    </div>
+                {/each}
+                {#if debateBusy}
+                    <div class="turn turn-author"><p class="turn-text mcat-muted">…</p></div>
+                {/if}
+            </div>
+
+            {#if debateError}<p class="debate-err">{debateError}</p>{/if}
+
+            <div class="debate-compose">
+                <textarea
+                    rows="3"
+                    bind:value={debateInput}
+                    placeholder="Make your argument…"
+                    disabled={debateBusy}
+                ></textarea>
+                <button
+                    class="mcat-btn mcat-btn-primary"
+                    disabled={debateBusy || debateInput.trim().length < 3}
+                    on:click={sendDebate}
+                >
+                    {debateBusy ? "…" : "Send"}
+                </button>
+            </div>
+
+            <div class="row">
+                {#if fromRoadmap}
+                    <button
+                        class="mcat-btn mcat-btn-primary"
+                        disabled={saving || debate.length === 0}
+                        on:click={() => finish(() => goto("/mcat/roadmap"))}
+                    >
+                        {saving ? "Saving…" : "Finish & back to roadmap"}
+                    </button>
+                {:else}
+                    <button
+                        class="mcat-btn mcat-btn-primary"
+                        disabled={saving || debate.length === 0}
+                        on:click={() => finish(() => goto("/mcat/dashboard"))}
+                    >
+                        {saving ? "Saving…" : "Finish debate"}
+                    </button>
+                    <button
+                        class="mcat-btn"
+                        disabled={saving}
+                        on:click={() => {
+                            debate = [];
+                            finish(load);
+                        }}
+                    >
+                        Another passage
+                    </button>
+                {/if}
+            </div>
+        {:else if !revealed}
             <div class="prompts">
                 {#each textPrompts as prompt, i (i)}
                     <div class="mcat-card prompt">
@@ -372,5 +509,77 @@ rate yourself on. Responses + self-rating are stored (AI-ready) for later.
         gap: 10px;
         margin-top: 16px;
         flex-wrap: wrap;
+    }
+    .debate-intro {
+        margin-bottom: 14px;
+    }
+    .author-claim {
+        margin: 8px 0 0;
+        font-size: 15px;
+    }
+    .debate {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-bottom: 14px;
+    }
+    .turn {
+        border-radius: 12px;
+        padding: 12px 14px;
+        max-width: 90%;
+    }
+    .turn-student {
+        align-self: flex-end;
+        background: color-mix(in srgb, var(--mcat-accent) 12%, var(--mcat-surface));
+        border: 1px solid color-mix(in srgb, var(--mcat-accent) 26%, var(--mcat-border));
+    }
+    .turn-author {
+        align-self: flex-start;
+        background: var(--mcat-surface);
+        border: 1px solid var(--mcat-border);
+    }
+    .turn-who {
+        font-size: 12px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--mcat-muted);
+        margin-bottom: 4px;
+    }
+    .turn-text {
+        margin: 0;
+        font-size: 15px;
+        line-height: 1.55;
+    }
+    .turn-critique {
+        margin-top: 10px;
+        padding-top: 8px;
+        border-top: 1px dashed var(--mcat-border);
+        font-size: 13px;
+        color: var(--mcat-muted);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    .crit-tag {
+        font-size: 11px;
+        font-weight: 800;
+        text-transform: uppercase;
+        color: var(--mcat-accent);
+    }
+    .debate-compose {
+        display: flex;
+        gap: 10px;
+        align-items: flex-end;
+    }
+    .debate-compose textarea {
+        flex: 1;
+    }
+    .debate-err {
+        color: var(--mcat-red);
+        font-size: 14px;
+        font-weight: 600;
+        margin: 0 0 10px;
     }
 </style>

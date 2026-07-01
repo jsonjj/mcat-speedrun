@@ -220,6 +220,7 @@ def _local_payload(col: anki.collection.Collection) -> dict[str, Any]:
         "roadmapDate": plan.get("date") or "",
         "mcatLogDesktop": json.dumps(store.get_mcat_log(col)),
         "diagnosticKind": profile.get("diagnostic_kind") or "",
+        "aiEnabled": bool(profile.get("ai_enabled", True)),
     }
 
 
@@ -295,6 +296,8 @@ def pull(col: anki.collection.Collection) -> str:
         updates["daily_minutes"] = int(remote["dailyMinutes"])
     if remote.get("diagnosticKind"):
         updates["diagnostic_kind"] = remote["diagnosticKind"]
+    if "aiEnabled" in remote:
+        updates["ai_enabled"] = bool(remote["aiEnabled"])
     if updates:
         store.update_profile(col, **updates)
     if "streak" in remote or "streakDate" in remote:

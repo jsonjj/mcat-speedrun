@@ -47,6 +47,7 @@ export interface Profile {
     diagnostic_kind: string | null;
     logged_in: boolean;
     is_dev: boolean;
+    ai_enabled: boolean;
 }
 
 export interface Streak {
@@ -83,6 +84,26 @@ export interface QuestionBatch {
     questions: Question[];
 }
 
+export interface AiFeedback {
+    verdict: string;
+    feedback: string;
+    key_point: string;
+    source: string;
+}
+
+export interface CoachRecommendation {
+    focus: string;
+    section: string;
+    headline: string;
+    detail: string;
+    source: string;
+}
+
+export interface CoachResponse {
+    ai_enabled: boolean;
+    recommendation: CoachRecommendation | null;
+}
+
 export interface RevealResult {
     note_id: number;
     correct: string;
@@ -90,6 +111,7 @@ export interface RevealResult {
     first_correct: boolean;
     second_correct?: boolean;
     label?: string | null;
+    ai_feedback?: AiFeedback;
 }
 
 export interface FirstPassResponse {
@@ -162,6 +184,18 @@ export interface CarsPassage {
 export interface CarsResponse {
     passage: CarsPassage | null;
     rubric: string[];
+}
+
+export interface CarsDebateReply {
+    reply: string;
+    critique: string;
+    skill: string;
+    source: string;
+}
+
+export interface CarsDebateResponse {
+    ai_enabled: boolean;
+    reply: CarsDebateReply | null;
 }
 
 export const SECTION_NAMES: Record<string, string> = {

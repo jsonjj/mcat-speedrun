@@ -22,6 +22,7 @@ import flask
 
 import aqt
 from anki.mcat import (
+    ai,
     content,
     firebase_sync,
     planner,
@@ -71,6 +72,18 @@ def mcat_dashboard() -> bytes:
         "scores": scoring.compute_scores(col) if has_content else None,
     }
     return _json(payload)
+
+
+def mcat_coach() -> bytes:
+    """AI study coach: reads the student's measured scores and recommends the
+    single best next step. Returns {ai_enabled, recommendation|null}. With AI off
+    (or no data / API down), recommendation is null and the UI shows nothing."""
+    col = _col()
+    if not ai.enabled(col) or not questions.performance_note_ids(col):
+        return _json({"ai_enabled": ai.enabled(col), "recommendation": None})
+    scores = scoring.compute_scores(col)
+    rec = ai.coach_recommendation(col, scores=scores)
+    return _json({"ai_enabled": True, "recommendation": rec})
 
 
 def mcat_bootstrap() -> bytes:
@@ -133,6 +146,7 @@ def mcat_save_profile() -> bytes:
         "diagnostic_done",
         "diagnostic_kind",
         "logged_in",
+        "ai_enabled",
     )
     for key in allowed:
         if key in body:
@@ -476,6 +490,7 @@ def mcat_submit_second() -> bytes:
         if a.get("batch_id") == batch_id and a.get("note_id") is not None
     }
 
+    ai_on = ai.enabled(col)
     results: list[dict[str, Any]] = []
     for ans in answers:
         note_id = int(ans["note_id"])
@@ -492,14 +507,30 @@ def mcat_submit_second() -> bytes:
                 reasoning_text=reasoning,
             )
             store.update_attempt(col, attempt)
-        results.append(
-            {
-                **_reveal(col, note_id, bool(attempt and attempt.get("first_correct"))),
-                "second_correct": second_correct,
-                "label": attempt.get("second_pass_label") if attempt else None,
-            }
-        )
-    return _json({"reveal": True, "batch_id": batch_id, "results": results})
+        reveal = _reveal(col, note_id, bool(attempt and attempt.get("first_correct")))
+        result = {
+            **reveal,
+            "second_correct": second_correct,
+            "label": attempt.get("second_pass_label") if attempt else None,
+        }
+        # AI reasoning feedback, grounded in this item's official explanation.
+        if ai_on and reasoning.strip():
+            meta = questions.serialize_question(col, note_id)
+            feedback = ai.grade_reasoning(
+                col,
+                question=meta["question"],
+                choices=meta["choices"],
+                student_choice=choice,
+                correct_choice=correct_key,
+                explanation=reveal.get("explanation", ""),
+                student_reasoning=reasoning,
+            )
+            if feedback:
+                result["ai_feedback"] = feedback
+        results.append(result)
+    return _json(
+        {"reveal": True, "batch_id": batch_id, "results": results, "ai_enabled": ai_on}
+    )
 
 
 def mcat_complete_diagnostic() -> bytes:
@@ -782,12 +813,31 @@ def mcat_submit_cars() -> bytes:
     return _json({"saved": True})
 
 
+def mcat_cars_debate() -> bytes:
+    """One turn of the AI CARS debate: the student argues, the AI author rebuts,
+    grounded in the passage. Returns {ai_enabled, reply|null}. With AI off, the
+    UI uses the classic self-assessed debate prompts instead."""
+    body = _body()
+    col = _col()
+    if not ai.enabled(col):
+        return _json({"ai_enabled": False, "reply": None})
+    reply = ai.cars_debate_reply(
+        col,
+        passage=str(body.get("passage", "")),
+        author_claim=str(body.get("author_claim", "")),
+        history=body.get("history", []),
+        student_message=str(body.get("student_message", "")),
+    )
+    return _json({"ai_enabled": True, "reply": reply})
+
+
 # Registry
 #############################################################################
 
 # Exposed to aqt.mediasrv; names are camel-cased for the URL.
 MCAT_POST_HANDLERS = [
     mcat_dashboard,
+    mcat_coach,
     mcat_bootstrap,
     mcat_get_profile,
     mcat_account,
@@ -812,4 +862,5 @@ MCAT_POST_HANDLERS = [
     mcat_dev_clear_scores,
     mcat_cars,
     mcat_submit_cars,
+    mcat_cars_debate,
 ]

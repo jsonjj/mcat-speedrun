@@ -143,13 +143,19 @@ function roadmapCount(block: RoadmapBlock): number {
 // Map a roadmap block to the page that actually does that task. We tag the URL
 // with from=roadmap (so the nav stays on "Roadmap", not "Extra Practice") and
 // the block id (so finishing the task marks that block done).
-export function blockRoute(block: RoadmapBlock): string {
+export function blockRoute(block: RoadmapBlock, aiEnabled = false): string {
     const q = new URLSearchParams({
         from: "roadmap",
         block: block.id,
         count: String(roadmapCount(block)),
     });
+    // With AI on, a CARS practice block becomes the interactive author debate;
+    // with AI off it stays a multiple-choice set.
+    const isCars = block.kind === "cars" || block.section === "cars";
     let base: string;
+    if (isCars && aiEnabled) {
+        return `/mcat/cars?${new URLSearchParams({ from: "roadmap", block: block.id }).toString()}`;
+    }
     if (block.kind === "cars") {
         base = "/mcat/cars";
     } else if (block.kind === "memory") {

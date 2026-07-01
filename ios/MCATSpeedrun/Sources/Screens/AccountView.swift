@@ -36,6 +36,7 @@ struct AccountView: View {
                 identityCard
                 streakCard
                 studySettingsCard
+                aiCard
                 scoresSection
                 footer
             }
@@ -58,6 +59,28 @@ struct AccountView: View {
             .buttonStyle(SecondaryButtonStyle())
             .fixedSize()
         }
+    }
+
+    // MARK: - AI features toggle
+
+    private var aiCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Toggle(isOn: $app.aiEnabled) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("AI features")
+                        .font(Theme.font(16, .bold))
+                        .foregroundStyle(Theme.text)
+                    Text(
+                        "Personalized feedback, CARS debate, and a study coach. "
+                            + "Off = classic mode; everything still works and scores.")
+                        .font(Theme.font(13))
+                        .foregroundStyle(Theme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .tint(Theme.accent)
+        }
+        .cardStyle()
     }
 
     // MARK: - Identity

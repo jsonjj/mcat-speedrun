@@ -15,18 +15,32 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     import { soundOn } from "../lib/sound";
     import Switch from "../lib/Switch.svelte";
     import { darkMode } from "../lib/theme";
-    import type { DashboardData, ScoreBlock } from "../lib/types";
+    import type {
+        CoachRecommendation,
+        CoachResponse,
+        DashboardData,
+        ScoreBlock,
+    } from "../lib/types";
 
     const SECTION_ORDER = ["bb", "cp", "ps", "cars"];
 
     let data: DashboardData | null = null;
     let loading = true;
     let busy = false;
+    let coach: CoachRecommendation | null = null;
 
     async function load(): Promise<void> {
         loading = true;
         data = await postJson<DashboardData>("mcatDashboard");
         loading = false;
+        // Best-effort AI coach; never blocks the dashboard.
+        coach = null;
+        try {
+            const c = await postJson<CoachResponse>("mcatCoach");
+            coach = c.recommendation;
+        } catch {
+            coach = null;
+        }
     }
 
     async function bootstrap(): Promise<void> {
@@ -114,6 +128,22 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
             </button>
         </div>
     {:else if data.scores}
+        {#if coach}
+            <div class="mcat-card coach">
+                <div class="coach-icon"><Icon name="target" size={20} /></div>
+                <div class="coach-body">
+                    <div class="coach-head">
+                        <span class="coach-tag">Your AI coach</span>
+                        {#if coach.section}<span class="coach-sec"
+                                >{SECTION_WORD[coach.section] ?? coach.section}</span
+                            >{/if}
+                    </div>
+                    <div class="coach-headline">{coach.headline}</div>
+                    <p class="coach-detail">{coach.detail}</p>
+                    <p class="coach-src">Source: {coach.source}</p>
+                </div>
+            </div>
+        {/if}
         <div class="grid">
             <section class="evcards">
                 <EvidenceCard
@@ -332,5 +362,64 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         font-size: 14px;
         font-weight: 700;
         color: var(--mcat-accent);
+    }
+    .coach {
+        display: flex;
+        gap: 14px;
+        align-items: flex-start;
+        margin-bottom: 16px;
+        background: color-mix(in srgb, var(--mcat-accent) 8%, var(--mcat-surface));
+        border: 1px solid color-mix(in srgb, var(--mcat-accent) 22%, var(--mcat-border));
+    }
+    .coach-icon {
+        flex: 0 0 auto;
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        background: linear-gradient(135deg, var(--mcat-accent), var(--mcat-accent-2));
+    }
+    .coach-body {
+        flex: 1;
+    }
+    .coach-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 4px;
+    }
+    .coach-tag {
+        font-size: 12px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--mcat-accent);
+    }
+    .coach-sec {
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--mcat-muted);
+        border: 1px solid var(--mcat-border);
+        border-radius: 999px;
+        padding: 2px 9px;
+    }
+    .coach-headline {
+        font-size: 18px;
+        font-weight: 800;
+        margin-bottom: 4px;
+    }
+    .coach-detail {
+        margin: 0 0 6px;
+        font-size: 15px;
+        color: var(--mcat-text);
+    }
+    .coach-src {
+        margin: 0;
+        font-size: 12px;
+        font-style: italic;
+        color: var(--mcat-muted);
     }
 </style>

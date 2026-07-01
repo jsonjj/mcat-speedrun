@@ -1,0 +1,190 @@
+{
+  "note": "Held-out gold set for the AI reasoning grader. Each item is a student's free-response argument on an MCAT question, with a human-assigned label. NONE of these appear in any prompt the app sends, so this is a true held-out test. Labels: sound (reasoning is correct and complete), partially_sound (right idea, gaps or minor errors), flawed (wrong reasoning / wrong conclusion). The grader is scored on exact-label accuracy and on a stricter 'safe' collapse (flawed vs not-flawed) since the costly error is calling flawed reasoning sound.",
+  "cutoff": {
+    "min_accuracy": 0.7,
+    "max_flawed_missed_rate": 0.2,
+    "explanation": "Ship the grader only if exact-label accuracy >= 70% AND it misses no more than 20% of genuinely flawed reasoning (never praise a wrong argument)."
+  },
+  "items": [
+    {
+      "question": "A wave doubles in frequency while its speed is held constant. Its wavelength:",
+      "choices": [{"key": "A", "text": "Doubles"}, {"key": "B", "text": "Is halved"}, {"key": "C", "text": "Is unchanged"}, {"key": "D", "text": "Quadruples"}],
+      "student_choice": "B",
+      "correct_choice": "B",
+      "explanation": "v = f\u03bb. With v held constant, doubling f must halve \u03bb.",
+      "student_reasoning": "Speed equals frequency times wavelength, and speed is constant, so if frequency doubles the wavelength has to halve to keep the product the same.",
+      "expected": "sound"
+    },
+    {
+      "question": "A wave doubles in frequency while its speed is held constant. Its wavelength:",
+      "choices": [{"key": "A", "text": "Doubles"}, {"key": "B", "text": "Is halved"}, {"key": "C", "text": "Is unchanged"}, {"key": "D", "text": "Quadruples"}],
+      "student_choice": "A",
+      "correct_choice": "B",
+      "explanation": "v = f\u03bb. With v held constant, doubling f must halve \u03bb.",
+      "student_reasoning": "Frequency and wavelength both describe the wave getting bigger, so if frequency goes up wavelength goes up too.",
+      "expected": "flawed"
+    },
+    {
+      "question": "Which amino acid is most likely buried in the hydrophobic core of a globular protein?",
+      "choices": [{"key": "A", "text": "Lysine"}, {"key": "B", "text": "Valine"}, {"key": "C", "text": "Glutamate"}, {"key": "D", "text": "Serine"}],
+      "student_choice": "B",
+      "correct_choice": "B",
+      "explanation": "Valine has a nonpolar side chain, so it is sequestered away from water in the protein core.",
+      "student_reasoning": "Valine is nonpolar so it hates water and gets buried inside away from the aqueous environment.",
+      "expected": "sound"
+    },
+    {
+      "question": "Which amino acid is most likely buried in the hydrophobic core of a globular protein?",
+      "choices": [{"key": "A", "text": "Lysine"}, {"key": "B", "text": "Valine"}, {"key": "C", "text": "Glutamate"}, {"key": "D", "text": "Serine"}],
+      "student_choice": "B",
+      "correct_choice": "B",
+      "explanation": "Valine has a nonpolar side chain, so it is sequestered away from water in the protein core.",
+      "student_reasoning": "I picked valine because it is a small amino acid and small things fit in the middle.",
+      "expected": "partially_sound"
+    },
+    {
+      "question": "During intense exercise, muscle regenerates NAD+ anaerobically primarily via:",
+      "choices": [{"key": "A", "text": "The citric acid cycle"}, {"key": "B", "text": "Oxidative phosphorylation"}, {"key": "C", "text": "Lactic acid fermentation"}, {"key": "D", "text": "Beta-oxidation"}],
+      "student_choice": "C",
+      "correct_choice": "C",
+      "explanation": "Fermentation reduces pyruvate to lactate, oxidizing NADH back to NAD+ so glycolysis can continue without oxygen.",
+      "student_reasoning": "Without oxygen the cell converts pyruvate to lactate, which turns NADH back into NAD+ so glycolysis keeps running.",
+      "expected": "sound"
+    },
+    {
+      "question": "During intense exercise, muscle regenerates NAD+ anaerobically primarily via:",
+      "choices": [{"key": "A", "text": "The citric acid cycle"}, {"key": "B", "text": "Oxidative phosphorylation"}, {"key": "C", "text": "Lactic acid fermentation"}, {"key": "D", "text": "Beta-oxidation"}],
+      "student_choice": "B",
+      "correct_choice": "C",
+      "explanation": "Fermentation reduces pyruvate to lactate, oxidizing NADH back to NAD+ so glycolysis can continue without oxygen.",
+      "student_reasoning": "Oxidative phosphorylation makes the most ATP so it must be what regenerates NAD+ during hard exercise.",
+      "expected": "flawed"
+    },
+    {
+      "question": "A 2 kg cart accelerates at 3 m/s^2. The net force on it is:",
+      "choices": [{"key": "A", "text": "1.5 N"}, {"key": "B", "text": "5 N"}, {"key": "C", "text": "6 N"}, {"key": "D", "text": "9 N"}],
+      "student_choice": "C",
+      "correct_choice": "C",
+      "explanation": "F = ma = (2 kg)(3 m/s^2) = 6 N.",
+      "student_reasoning": "Force is mass times acceleration, so 2 times 3 is 6 newtons.",
+      "expected": "sound"
+    },
+    {
+      "question": "A 2 kg cart accelerates at 3 m/s^2. The net force on it is:",
+      "choices": [{"key": "A", "text": "1.5 N"}, {"key": "B", "text": "5 N"}, {"key": "C", "text": "6 N"}, {"key": "D", "text": "9 N"}],
+      "student_choice": "B",
+      "correct_choice": "C",
+      "explanation": "F = ma = (2 kg)(3 m/s^2) = 6 N.",
+      "student_reasoning": "I added the mass and acceleration, 2 plus 3 gives 5 newtons.",
+      "expected": "flawed"
+    },
+    {
+      "question": "Which memory store has essentially unlimited capacity and the longest duration?",
+      "choices": [{"key": "A", "text": "Sensory memory"}, {"key": "B", "text": "Short-term memory"}, {"key": "C", "text": "Working memory"}, {"key": "D", "text": "Long-term memory"}],
+      "student_choice": "D",
+      "correct_choice": "D",
+      "explanation": "Long-term memory has no known capacity limit and can persist for years; the others are brief and limited.",
+      "student_reasoning": "Long-term memory can hold information for years and has no real capacity limit, unlike the brief stores.",
+      "expected": "sound"
+    },
+    {
+      "question": "Which memory store has essentially unlimited capacity and the longest duration?",
+      "choices": [{"key": "A", "text": "Sensory memory"}, {"key": "B", "text": "Short-term memory"}, {"key": "C", "text": "Working memory"}, {"key": "D", "text": "Long-term memory"}],
+      "student_choice": "C",
+      "correct_choice": "D",
+      "explanation": "Long-term memory has no known capacity limit and can persist for years; the others are brief and limited.",
+      "student_reasoning": "Working memory is where we keep everything we know so it must have the biggest capacity.",
+      "expected": "flawed"
+    },
+    {
+      "question": "The resting membrane potential of a neuron is maintained primarily by:",
+      "choices": [{"key": "A", "text": "The Na+/K+ ATPase"}, {"key": "B", "text": "Voltage-gated Ca2+ channels"}, {"key": "C", "text": "Ligand-gated Cl- channels"}, {"key": "D", "text": "Gap junctions"}],
+      "student_choice": "A",
+      "correct_choice": "A",
+      "explanation": "The Na+/K+ ATPase pumps 3 Na+ out and 2 K+ in, sustaining the gradients behind the ~ -70 mV resting potential.",
+      "student_reasoning": "The sodium potassium pump keeps the ion gradients that set the resting potential by pumping sodium out and potassium in.",
+      "expected": "sound"
+    },
+    {
+      "question": "The resting membrane potential of a neuron is maintained primarily by:",
+      "choices": [{"key": "A", "text": "The Na+/K+ ATPase"}, {"key": "B", "text": "Voltage-gated Ca2+ channels"}, {"key": "C", "text": "Ligand-gated Cl- channels"}, {"key": "D", "text": "Gap junctions"}],
+      "student_choice": "A",
+      "correct_choice": "A",
+      "explanation": "The Na+/K+ ATPase pumps 3 Na+ out and 2 K+ in, sustaining the gradients behind the ~ -70 mV resting potential.",
+      "student_reasoning": "I know the pump is involved in neurons somehow so I picked it, but I am not sure exactly what it does.",
+      "expected": "partially_sound"
+    },
+    {
+      "question": "In a solution at equilibrium, adding more product will:",
+      "choices": [{"key": "A", "text": "Shift the reaction toward reactants"}, {"key": "B", "text": "Shift the reaction toward products"}, {"key": "C", "text": "Have no effect"}, {"key": "D", "text": "Stop the reaction"}],
+      "student_choice": "A",
+      "correct_choice": "A",
+      "explanation": "By Le Chatelier's principle, adding product stresses the system, which shifts to consume product, i.e. toward reactants.",
+      "student_reasoning": "Le Chatelier says the system relieves the stress, so adding product pushes it back toward reactants to use up the extra product.",
+      "expected": "sound"
+    },
+    {
+      "question": "In a solution at equilibrium, adding more product will:",
+      "choices": [{"key": "A", "text": "Shift the reaction toward reactants"}, {"key": "B", "text": "Shift the reaction toward products"}, {"key": "C", "text": "Have no effect"}, {"key": "D", "text": "Stop the reaction"}],
+      "student_choice": "B",
+      "correct_choice": "A",
+      "explanation": "By Le Chatelier's principle, adding product stresses the system, which shifts to consume product, i.e. toward reactants.",
+      "student_reasoning": "More product means the forward reaction speeds up to make even more product.",
+      "expected": "flawed"
+    },
+    {
+      "question": "A researcher finds a correlation between ice cream sales and drownings. The best interpretation is:",
+      "choices": [{"key": "A", "text": "Ice cream causes drowning"}, {"key": "B", "text": "A confounder (hot weather) drives both"}, {"key": "C", "text": "Drowning causes ice cream sales"}, {"key": "D", "text": "The correlation is impossible"}],
+      "student_choice": "B",
+      "correct_choice": "B",
+      "explanation": "Correlation is not causation; a third variable (hot weather) plausibly increases both ice cream sales and swimming, hence drownings.",
+      "student_reasoning": "Correlation doesn't mean causation. Hot weather likely increases both ice cream buying and swimming, so it's a confounding variable.",
+      "expected": "sound"
+    },
+    {
+      "question": "A researcher finds a correlation between ice cream sales and drownings. The best interpretation is:",
+      "choices": [{"key": "A", "text": "Ice cream causes drowning"}, {"key": "B", "text": "A confounder (hot weather) drives both"}, {"key": "C", "text": "Drowning causes ice cream sales"}, {"key": "D", "text": "The correlation is impossible"}],
+      "student_choice": "A",
+      "correct_choice": "B",
+      "explanation": "Correlation is not causation; a third variable (hot weather) plausibly increases both ice cream sales and swimming, hence drownings.",
+      "student_reasoning": "Since the two go up together, eating ice cream must be what causes people to drown.",
+      "expected": "flawed"
+    },
+    {
+      "question": "Enzyme catalysis lowers which quantity for a reaction?",
+      "choices": [{"key": "A", "text": "The equilibrium constant"}, {"key": "B", "text": "The activation energy"}, {"key": "C", "text": "The free energy change"}, {"key": "D", "text": "The enthalpy of products"}],
+      "student_choice": "B",
+      "correct_choice": "B",
+      "explanation": "Enzymes lower activation energy, speeding the reaction; they do not change \u0394G or the equilibrium constant.",
+      "student_reasoning": "Enzymes give a lower-energy pathway, so they reduce the activation energy without changing the overall thermodynamics.",
+      "expected": "sound"
+    },
+    {
+      "question": "Enzyme catalysis lowers which quantity for a reaction?",
+      "choices": [{"key": "A", "text": "The equilibrium constant"}, {"key": "B", "text": "The activation energy"}, {"key": "C", "text": "The free energy change"}, {"key": "D", "text": "The enthalpy of products"}],
+      "student_choice": "C",
+      "correct_choice": "B",
+      "explanation": "Enzymes lower activation energy, speeding the reaction; they do not change \u0394G or the equilibrium constant.",
+      "student_reasoning": "Enzymes make reactions more favorable so they must lower the free energy change to make it happen.",
+      "expected": "flawed"
+    },
+    {
+      "question": "Which best explains why oil and water do not mix?",
+      "choices": [{"key": "A", "text": "Oil is denser than water"}, {"key": "B", "text": "The entropy cost of ordering water around nonpolar oil"}, {"key": "C", "text": "Oil molecules are charged"}, {"key": "D", "text": "Water is nonpolar"}],
+      "student_choice": "B",
+      "correct_choice": "B",
+      "explanation": "Nonpolar oil forces surrounding water into ordered cages, lowering entropy; separating minimizes this cost (the hydrophobic effect).",
+      "student_reasoning": "Water has to form ordered structures around nonpolar oil which lowers entropy, so they separate to reduce that entropy penalty.",
+      "expected": "sound"
+    },
+    {
+      "question": "Which best explains why oil and water do not mix?",
+      "choices": [{"key": "A", "text": "Oil is denser than water"}, {"key": "B", "text": "The entropy cost of ordering water around nonpolar oil"}, {"key": "C", "text": "Oil molecules are charged"}, {"key": "D", "text": "Water is nonpolar"}],
+      "student_choice": "A",
+      "correct_choice": "B",
+      "explanation": "Nonpolar oil forces surrounding water into ordered cages, lowering entropy; separating minimizes this cost (the hydrophobic effect).",
+      "student_reasoning": "Oil is heavier than water so it just sinks and separates out.",
+      "expected": "flawed"
+    }
+  ]
+}

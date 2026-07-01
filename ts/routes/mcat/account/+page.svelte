@@ -11,6 +11,7 @@ and see your streak plus the three scores.
 
     import { postJson } from "../lib/api";
     import EvidenceCard from "../lib/EvidenceCard.svelte";
+    import Switch from "../lib/Switch.svelte";
     import type { AccountData, Profile } from "../lib/types";
 
     const RECOMMENDED = 120;
@@ -22,13 +23,22 @@ and see your streak plus the three scores.
     let saved = false;
     let examDate = "";
     let dailyMinutes = RECOMMENDED;
+    let aiEnabled = true;
 
     async function load(): Promise<void> {
         loading = true;
         data = await postJson<AccountData>("mcatAccount");
         examDate = data.profile.exam_date ?? "";
         dailyMinutes = data.profile.daily_minutes ?? RECOMMENDED;
+        aiEnabled = data.profile.ai_enabled ?? true;
         loading = false;
+    }
+
+    async function toggleAi(next: boolean): Promise<void> {
+        aiEnabled = next;
+        await postJson<{ profile: Profile }>("mcatSaveProfile", {
+            ai_enabled: next,
+        });
     }
 
     async function save(): Promise<void> {
@@ -130,6 +140,24 @@ and see your streak plus the three scores.
             </div>
         </div>
 
+        <div class="mcat-card ai-card">
+            <div class="ai-row">
+                <div>
+                    <h2>AI features</h2>
+                    <p class="mcat-muted note">
+                        Personalized reasoning feedback, CARS debate, and a study
+                        coach. Turn off for classic mode — everything still works and
+                        still scores, with no AI calls.
+                    </p>
+                </div>
+                <Switch
+                    checked={aiEnabled}
+                    label="AI features"
+                    on:toggle={(e) => toggleAi(e.detail)}
+                />
+            </div>
+        </div>
+
         <h2 class="scores-heading">Your scores</h2>
         {#if data.scores}
             <section class="scores">
@@ -211,6 +239,19 @@ and see your streak plus the three scores.
     .settings h2 {
         margin: 0 0 12px;
         font-size: 19px;
+    }
+    .ai-card {
+        margin-bottom: 16px;
+    }
+    .ai-card h2 {
+        margin: 0 0 6px;
+        font-size: 19px;
+    }
+    .ai-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
     }
     .settings-grid {
         display: grid;

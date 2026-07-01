@@ -49,6 +49,8 @@ final class AppState: ObservableObject {
     // low-confidence readiness estimate (mirrors desktop). Synced.
     @Published var diagnosticKind: String? { didSet { syncHook?() } }
     var diagnosticDone: Bool { diagnosticKind != nil }
+    // AI features on/off (on by default); off = the no-AI experience. Synced.
+    @Published var aiEnabled: Bool = true { didSet { syncHook?() } }
     // The roadmap block currently being worked on (so finishing it marks it done).
     private var activeLaunchKey: String?
 

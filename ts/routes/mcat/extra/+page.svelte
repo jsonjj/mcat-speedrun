@@ -14,20 +14,32 @@ blocks are complete, so the highest-value work always comes first.
     import { SECTION_COLOR, textColor } from "../lib/blocks";
     import Icon from "../lib/Icon.svelte";
     import { SECTION_NAMES } from "../lib/types";
-    import type { RoadmapResponse } from "../lib/types";
+    import type { Profile, RoadmapResponse } from "../lib/types";
 
     const SECTIONS = ["bb", "cp", "ps", "cars"];
 
     let unlocked = false;
     let loading = true;
     let phase = "";
+    let aiEnabled = false;
 
     async function load(): Promise<void> {
         loading = true;
         const resp = await postJson<RoadmapResponse>("mcatRoadmap");
         unlocked = resp.free_practice_unlocked;
         phase = resp.plan?.phase ?? "";
+        try {
+            const p = await postJson<{ profile: Profile }>("mcatGetProfile");
+            aiEnabled = p.profile.ai_enabled ?? false;
+        } catch {
+            aiEnabled = false;
+        }
         loading = false;
+    }
+
+    // CARS: an interactive AI debate when AI is on, else the MCQ set.
+    function carsDest(): string {
+        return aiEnabled ? "/mcat/cars" : "/mcat/mini?section=cars";
     }
 
     onMount(load);
@@ -70,9 +82,14 @@ blocks are complete, so the highest-value work always comes first.
                     <div class="card-actions">
                         <button
                             class="opt"
-                            on:click={() => goto(`/mcat/mini?section=${code}`)}
+                            on:click={() =>
+                                goto(
+                                    code === "cars"
+                                        ? carsDest()
+                                        : `/mcat/mini?section=${code}`,
+                                )}
                         >
-                            Problems
+                            {code === "cars" && aiEnabled ? "Debate" : "Problems"}
                         </button>
                         {#if code !== "cars" && phase !== "final"}
                             <button

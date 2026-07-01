@@ -15,7 +15,7 @@ is done) or from a roadmap block.
     import QuestionRunner from "../lib/QuestionRunner.svelte";
     import { playStart } from "../lib/sound";
     import { SECTION_NAMES } from "../lib/types";
-    import type { QuestionBatch } from "../lib/types";
+    import type { Profile, QuestionBatch } from "../lib/types";
 
     // ~1.5 min per question is a reasonable MCAT-form pace estimate.
     const MIN_PER_Q = 1.5;
@@ -27,6 +27,7 @@ is done) or from a roadmap block.
     let section: string | null = null;
     let blockId: string | null = null;
     let fromRoadmap = false;
+    let aiEnabled = false;
 
     // All-sections Mini-MCAT counts divide evenly across the four sections.
     const MINI_OPTIONS = [8, 12, 20];
@@ -70,11 +71,17 @@ is done) or from a roadmap block.
         done = false;
     }
 
-    onMount(() => {
+    onMount(async () => {
         section = $page.url.searchParams.get("section");
         blockId = $page.url.searchParams.get("block");
         fromRoadmap = $page.url.searchParams.get("from") === "roadmap";
         playStart("performance");
+        try {
+            const p = await postJson<{ profile: Profile }>("mcatGetProfile");
+            aiEnabled = p.profile.ai_enabled ?? false;
+        } catch {
+            aiEnabled = false;
+        }
         // Roadmap tasks are prescribed, so skip the chooser and start right away.
         if (fromRoadmap) {
             const c = Number($page.url.searchParams.get("count"));
@@ -139,6 +146,7 @@ is done) or from a roadmap block.
         {#key batch.batch_id}
             <QuestionRunner
                 {batch}
+                {aiEnabled}
                 phase="daily"
                 label={section ? "Section Practice" : "Mini-MCAT"}
                 accent="var(--mcat-blue)"

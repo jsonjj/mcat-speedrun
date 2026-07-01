@@ -19,6 +19,9 @@ correctness is decided on the backend.
     export let label = "Performance Set";
     export let accent = "var(--mcat-amber)";
     export let seconds = 90;
+    // When AI is on, the second pass asks the student to argue their answer, and
+    // results carry personalized reasoning feedback.
+    export let aiEnabled = false;
 
     const dispatch = createEventDispatcher<{ complete: { results: RevealResult[] } }>();
 
@@ -35,6 +38,7 @@ correctness is decided on the backend.
 
     let curChoice = "";
     let curConfidence = "";
+    let curReasoning = "";
     let questionStart = Date.now();
 
     // Per-item countdown.
@@ -135,6 +139,7 @@ correctness is decided on the backend.
             };
         }
         curChoice = secondAnswers[batch.questions[idx].note_id]?.choice ?? "";
+        curReasoning = "";
         resetTimer();
     }
 
@@ -142,13 +147,18 @@ correctness is decided on the backend.
         if (!curChoice) {
             return;
         }
+        // With AI on, require a short argument so the reasoning feedback is real.
+        if (aiEnabled && curReasoning.trim().length < 3) {
+            return;
+        }
         secondAnswers[batch.questions[idx].note_id] = {
             choice: curChoice,
-            reasoning: "",
+            reasoning: curReasoning.trim(),
         };
         if (idx + 1 < total) {
             idx += 1;
             curChoice = secondAnswers[batch.questions[idx].note_id]?.choice ?? "";
+            curReasoning = "";
             resetTimer();
         } else {
             await submitSecond();
@@ -241,6 +251,19 @@ correctness is decided on the backend.
                             {/each}
                         </div>
                     </div>
+                {:else if aiEnabled}
+                    <div class="reasoning">
+                        <label class="reasoning-label" for="reasoning">
+                            Argue your answer — why is it right?
+                        </label>
+                        <textarea
+                            id="reasoning"
+                            class="reasoning-input"
+                            rows="3"
+                            bind:value={curReasoning}
+                            placeholder="Explain your reasoning. Your coach will respond to this."
+                        ></textarea>
+                    </div>
                 {:else}
                     <p class="second-hint">
                         Second pass — take another look and lock in your final answer.
@@ -252,7 +275,9 @@ correctness is decided on the backend.
                         class="mcat-btn mcat-btn-primary"
                         disabled={busy ||
                             !curChoice ||
-                            (stage === "first" ? !curConfidence : false)}
+                            (stage === "first"
+                                ? !curConfidence
+                                : aiEnabled && curReasoning.trim().length < 3)}
                         on:click={stage === "first" ? nextFirst : nextSecond}
                     >
                         {idx + 1 < total ? "Submit & Next" : "Submit Response"}
@@ -310,6 +335,24 @@ correctness is decided on the backend.
                         {#if r.label}<span class="rp">{labelText(r.label)}</span>{/if}
                     </div>
                     {#if r.explanation}<p class="explanation">{r.explanation}</p>{/if}
+                    {#if r.ai_feedback}
+                        <div class="ai-feedback">
+                            <div class="ai-head">
+                                <span class="ai-badge ai-{r.ai_feedback.verdict}">
+                                    {labelText(r.ai_feedback.verdict)}
+                                </span>
+                                <span class="ai-tag">Coach feedback on your reasoning</span>
+                            </div>
+                            <p class="ai-text">{r.ai_feedback.feedback}</p>
+                            {#if r.ai_feedback.key_point}
+                                <p class="ai-key">
+                                    <strong>Key point:</strong>
+                                    {r.ai_feedback.key_point}
+                                </p>
+                            {/if}
+                            <p class="ai-src">Source: {r.ai_feedback.source}</p>
+                        </div>
+                    {/if}
                 </div>
             {/each}
             <button
@@ -577,5 +620,83 @@ correctness is decided on the backend.
         margin: 0;
         font-size: 15px;
         color: var(--mcat-muted);
+    }
+    .reasoning {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .reasoning-label {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--mcat-muted);
+    }
+    .reasoning-input {
+        width: 100%;
+        border: 1.5px solid var(--mcat-border);
+        border-radius: 12px;
+        padding: 12px 14px;
+        background: var(--mcat-surface);
+        color: var(--mcat-text);
+        font: inherit;
+        font-size: 15px;
+        resize: vertical;
+    }
+    .reasoning-input:focus {
+        outline: none;
+        border-color: var(--accent);
+    }
+    .ai-feedback {
+        margin-top: 12px;
+        padding: 14px;
+        border-radius: 12px;
+        background: color-mix(in srgb, var(--mcat-accent) 7%, var(--mcat-surface));
+        border: 1px solid color-mix(in srgb, var(--mcat-accent) 22%, var(--mcat-border));
+    }
+    .ai-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 8px;
+    }
+    .ai-badge {
+        font-size: 11px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        border-radius: 999px;
+        padding: 3px 10px;
+        color: #fff;
+        background: var(--mcat-muted);
+    }
+    .ai-badge.ai-sound {
+        background: var(--mcat-green);
+    }
+    .ai-badge.ai-partially_sound {
+        background: var(--mcat-amber);
+    }
+    .ai-badge.ai-flawed {
+        background: var(--mcat-red);
+    }
+    .ai-tag {
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--mcat-accent);
+    }
+    .ai-text {
+        margin: 0 0 8px;
+        font-size: 15px;
+        color: var(--mcat-text);
+    }
+    .ai-key {
+        margin: 0 0 8px;
+        font-size: 14px;
+        color: var(--mcat-text);
+    }
+    .ai-src {
+        margin: 0;
+        font-size: 12px;
+        color: var(--mcat-muted);
+        font-style: italic;
     }
 </style>

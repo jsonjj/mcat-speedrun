@@ -57,6 +57,9 @@ final class SyncManager: ObservableObject {
             if let dk = data["diagnosticKind"] as? String {
                 app.diagnosticKind = dk.isEmpty ? nil : dk
             }
+            if let ai = data["aiEnabled"] as? Bool {
+                app.aiEnabled = ai
+            }
             // The desktop's full engine log, so scores combine across devices.
             if let ldesk = data["mcatLogDesktop"] as? String {
                 self.progress?.applyRemoteLog(ldesk)
@@ -103,6 +106,7 @@ final class SyncManager: ObservableObject {
             "updatedAt": FieldValue.serverTimestamp(),
         ]
         if let ed = app.examDate { data["examDate"] = AppState.dayString(ed) }
+        data["aiEnabled"] = app.aiEnabled
         data["devMastery"] = app.devMastery ?? FieldValue.delete()
         if let progress {
             data["mcatLogIos"] = progress.stateJSON

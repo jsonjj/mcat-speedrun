@@ -16,7 +16,13 @@ streak node. Auto-scrolls to your current node.
     import Icon from "../lib/Icon.svelte";
     import { playStreak } from "../lib/sound";
     import { SECTION_NAMES } from "../lib/types";
-    import type { RoadmapBlock, RoadmapResponse, Roadmap, Streak } from "../lib/types";
+    import type {
+        Profile,
+        RoadmapBlock,
+        RoadmapResponse,
+        Roadmap,
+        Streak,
+    } from "../lib/types";
 
     const ROW = 196;
 
@@ -27,6 +33,7 @@ streak node. Auto-scrolls to your current node.
     let pathEl: HTMLDivElement | undefined;
 
     let isDev = false;
+    let aiEnabled = false;
     let wasUnlocked: boolean | null = null;
     let devBlock: RoadmapBlock | null = null;
     let devTotal = 0;
@@ -49,6 +56,12 @@ streak node. Auto-scrolls to your current node.
     async function load(): Promise<void> {
         loading = true;
         apply(await postJson<RoadmapResponse>("mcatRoadmap"));
+        try {
+            const p = await postJson<{ profile: Profile }>("mcatGetProfile");
+            aiEnabled = p.profile.ai_enabled ?? false;
+        } catch {
+            aiEnabled = false;
+        }
         loading = false;
         await scrollActive();
     }
@@ -102,7 +115,7 @@ streak node. Auto-scrolls to your current node.
         if (statuses[i] === "locked") {
             return;
         }
-        goto(blockRoute(block));
+        goto(blockRoute(block, aiEnabled));
     }
 
     function blockSub(block: RoadmapBlock): string {

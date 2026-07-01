@@ -24,3 +24,9 @@ ts/.svelte-kit
 docs/_build/
 docs/autoapi/
 .complexipy_cache
+
+# MCAT Speedrun — local AI secrets (never commit)
+**/.anthropic_key
+**/.openai_key
+**/mcat_ai_key*
+.env.local

@@ -36,6 +36,7 @@ KEY_REMOTE_STUDY = "mcat:remote_study"  # other device's study aggregate (sync)
 KEY_MEMORY_REVIEWS = "mcat:memory_reviews"  # this device's memory-review tally
 KEY_MCAT_LOG = "mcat:log"  # this device's shared-engine event log (McatState)
 KEY_REMOTE_MCAT_LOG = "mcat:remote_log"  # the other device's engine log (synced in)
+KEY_AI_CACHE = "mcat:ai_cache"  # cache of AI responses keyed by prompt hash
 
 # Dev backdoor: logging in with these credentials flips the profile into dev
 # mode, which exposes a "mark block done" tool on the roadmap for testing the
@@ -77,6 +78,7 @@ def get_profile(col: anki.collection.Collection) -> dict[str, Any]:
         "diagnostic_kind": None,  # quick | standard | best_estimate
         "logged_in": True,  # local session flag; logout sets this false
         "is_dev": False,  # dev-mode tools (roadmap "mark done")
+        "ai_enabled": True,  # AI features on by default; off = the no-AI build
     }
     if not isinstance(profile, dict):
         return defaults
