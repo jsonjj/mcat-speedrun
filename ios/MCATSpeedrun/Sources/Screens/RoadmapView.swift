@@ -12,6 +12,7 @@ import SwiftUI
 
 struct RoadmapView: View {
     @EnvironmentObject var app: AppState
+    @State private var appeared = false
 
     var body: some View {
         ScrollView {
@@ -26,6 +27,7 @@ struct RoadmapView: View {
         }
         .screenBackground()
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { appeared = true }
     }
 
     // MARK: - Header
@@ -142,6 +144,12 @@ struct RoadmapView: View {
                 markDoneRow(index: index)
             }
         }
+        // Cascade rows in as the path assembles.
+        .opacity(appeared ? 1 : 0)
+        .offset(y: appeared ? 0 : 16)
+        .animation(
+            .spring(response: 0.55, dampingFraction: 0.85).delay(Double(index) * 0.05),
+            value: appeared)
     }
 
     private func rowCard(index: Int, item: RoadmapItem, status: BlockStatus) -> some View {
@@ -298,7 +306,14 @@ struct RoadmapView: View {
         case .questions(let cfg):
             QuestionRunnerView(config: cfg)
         case .cars:
-            CarsView()
+            // AI on → interactive Author Duel; AI off → CARS MCQ practice.
+            if app.aiEnabled {
+                CarsView()
+            } else {
+                QuestionRunnerView(
+                    config: QuizConfig(
+                        title: "CARS Practice", sections: [.cars], count: 10, seconds: 120))
+            }
         }
     }
 }
@@ -308,9 +323,17 @@ struct RoadmapView: View {
 private struct NodeCircle: View {
     let status: BlockStatus
     let activity: Activity
+    @State private var pulse = false
 
     var body: some View {
         ZStack {
+            // "Radar ping" behind the active node.
+            if status == .active {
+                Circle()
+                    .stroke(activity.color.opacity(0.45), lineWidth: 3)
+                    .scaleEffect(pulse ? 1.3 : 1.0)
+                    .opacity(pulse ? 0 : 0.9)
+            }
             switch status {
             case .done:
                 Circle().fill(Theme.green)
@@ -333,6 +356,12 @@ private struct NodeCircle: View {
             }
         }
         .frame(width: 56, height: 56)
+        .onAppear {
+            guard status == .active else { return }
+            withAnimation(.easeOut(duration: 1.6).repeatForever(autoreverses: false)) {
+                pulse = true
+            }
+        }
     }
 }
 

@@ -6,12 +6,22 @@ Circular progress ring showing days remaining until the exam. The arc fills as
 test day approaches (relative to a ~180-day horizon).
 -->
 <script lang="ts">
+    import { cubicOut } from "svelte/easing";
+    import { tweened } from "svelte/motion";
+
     export let days: number | null;
 
     const R = 52;
     const C = 2 * Math.PI * R;
+    // Draw the arc and count the number up on mount (and re-animate on change).
+    const drawn = tweened(0, { duration: 950, easing: cubicOut });
+    const shownDays = tweened(0, { duration: 950, easing: cubicOut });
     $: progress = days === null ? 0 : Math.max(0.04, Math.min(1, 1 - days / 180));
-    $: dash = C * progress;
+    $: drawn.set(progress);
+    $: if (days !== null) {
+        shownDays.set(days);
+    }
+    $: dash = C * $drawn;
 </script>
 
 <div class="ring">
@@ -27,7 +37,7 @@ test day approaches (relative to a ~180-day horizon).
         />
     </svg>
     <div class="center">
-        <div class="num">{days === null ? "—" : days}</div>
+        <div class="num">{days === null ? "—" : Math.round($shownDays)}</div>
         <div class="lab">{days === null ? "Set Exam Date" : "Days To Go"}</div>
     </div>
 </div>
@@ -53,7 +63,6 @@ test day approaches (relative to a ~180-day horizon).
         stroke: var(--mcat-accent);
         stroke-width: 9;
         stroke-linecap: round;
-        transition: stroke-dasharray 0.4s ease;
     }
     .center {
         position: absolute;

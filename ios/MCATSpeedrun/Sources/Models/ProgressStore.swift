@@ -15,10 +15,32 @@ final class ProgressStore: ObservableObject {
     /// The other device's full engine log (synced in), folded into scores.
     @Published private(set) var remoteLog: String = "{}"
 
+    /// Pacing: cumulative questions answered past the time limit vs. total timed
+    /// questions — a local coaching hint the AI coach factors in (not synced).
+    @Published private(set) var slowAnswers = 0
+    @Published private(set) var timedAnswers = 0
+    var pacingSlowPct: Int {
+        timedAnswers > 0
+            ? Int((Double(slowAnswers) / Double(timedAnswers) * 100).rounded()) : 0
+    }
+
     /// Set by the sync layer; called when local study changes so it's pushed.
     var syncHook: (() -> Void)?
 
-    init() { load() }
+    init() {
+        load()
+        slowAnswers = UserDefaults.standard.integer(forKey: "mcat.pace.slow")
+        timedAnswers = UserDefaults.standard.integer(forKey: "mcat.pace.timed")
+    }
+
+    /// Record how many of a batch's questions ran past the per-question limit.
+    func recordPacing(slow: Int, total: Int) {
+        guard total > 0 else { return }
+        slowAnswers += max(0, slow)
+        timedAnswers += total
+        UserDefaults.standard.set(slowAnswers, forKey: "mcat.pace.slow")
+        UserDefaults.standard.set(timedAnswers, forKey: "mcat.pace.timed")
+    }
 
     // MARK: - Recording (append to the log via the engine)
 

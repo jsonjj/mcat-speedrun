@@ -12,6 +12,7 @@ second-pass reasoning stay honest (the client never receives answers early).
 
 from __future__ import annotations
 
+import datetime
 import json
 import random
 import time
@@ -31,6 +32,17 @@ from anki.mcat import (
     scoring,
     store,
 )
+
+# Diagnostic length ranked by how much it tightens the estimate. A daily
+# diagnostic never downgrades the stored kind (so a short daily can't hide the
+# readiness estimate a longer diagnostic already unlocked).
+_DIAG_RANK = {"quick": 1, "standard": 2, "best_estimate": 3}
+
+
+def _best_diag_kind(existing: str | None, chosen: str) -> str:
+    if _DIAG_RANK.get(chosen or "", 0) >= _DIAG_RANK.get(existing or "", 0):
+        return chosen
+    return existing or chosen
 
 
 def _col() -> Any:
@@ -404,6 +416,8 @@ def mcat_submit_first() -> bytes:
     batch_id = body.get("batch_id") or uuid.uuid4().hex
     phase = body.get("phase", schema.PHASE_DAILY)
     answers = body.get("answers", [])
+    # The diagnostic runs single-pass: reveal everything after the first pass.
+    single_pass = bool(body.get("single_pass"))
 
     wrong = 0
     results: list[dict[str, Any]] = []
@@ -430,6 +444,7 @@ def mcat_submit_first() -> bytes:
             confidence=str(ans.get("confidence", schema.CONFIDENCE_GUESSING)),
             first_time_ms=int(ans.get("time_ms", 0)),
             batch_id=batch_id,
+            over_time=bool(ans.get("over_time")),
         )
         store.add_attempt(col, attempt)
         log_attempts.append(
@@ -448,12 +463,12 @@ def mcat_submit_first() -> bytes:
     firebase_sync.push(col)  # sync this batch's attempts promptly (best-effort)
 
     total = len(answers)
-    if wrong == 0:
+    if single_pass or wrong == 0:
         return _json(
             {
                 "reveal": True,
                 "batch_id": batch_id,
-                "wrong_count": 0,
+                "wrong_count": wrong,
                 "total": total,
                 "results": [
                     _reveal(col, r["note_id"], r["first_correct"]) for r in results
@@ -536,12 +551,21 @@ def mcat_submit_second() -> bytes:
 def mcat_complete_diagnostic() -> bytes:
     body = _body()
     col = _col()
-    kind = body.get("kind", "standard")
+    chosen = str(body.get("kind", "standard"))
+    existing = store.get_profile(col).get("diagnostic_kind")
+    kind = _best_diag_kind(existing, chosen)
+    # Records the day so the daily diagnostic locks until tomorrow (synced). The
+    # attempts themselves were already logged by the runner, so scores refine
+    # additively — this never resets them.
     profile = store.update_profile(
-        col, diagnostic_done=True, diagnostic_kind=kind, onboarding_done=True
+        col,
+        diagnostic_done=True,
+        diagnostic_kind=kind,
+        onboarding_done=True,
+        last_diagnostic_date=datetime.date.today().isoformat(),
     )
     firebase_sync.push(col)  # sync diagnostic result + seeded attempts
-    return _json({"profile": profile})
+    return _json({"profile": _public(profile)})
 
 
 def _reveal(col: Any, note_id: int, first_correct: bool) -> dict[str, Any]:

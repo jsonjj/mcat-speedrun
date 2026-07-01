@@ -15,15 +15,15 @@ struct BreakdownView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                ScreenHeader("Your Score Estimate")
+                ScreenHeader("Your Score Estimate").screenEnter()
 
-                ForEach(model.sections) { section in
-                    sectionCard(section)
+                ForEach(Array(model.sections.enumerated()), id: \.element.id) { i, section in
+                    sectionCard(section).screenEnter(delay: 0.05 + Double(i) * 0.06)
                 }
 
-                totalCard
+                totalCard.screenEnter(delay: 0.3)
 
-                legend
+                legend.screenEnter(delay: 0.36)
             }
             .padding(16)
         }

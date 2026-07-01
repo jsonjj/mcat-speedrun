@@ -45,6 +45,7 @@ export interface Profile {
     onboarding_done: boolean;
     diagnostic_done: boolean;
     diagnostic_kind: string | null;
+    last_diagnostic_date: string | null;
     logged_in: boolean;
     is_dev: boolean;
     ai_enabled: boolean;

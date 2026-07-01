@@ -10,8 +10,10 @@ Memory Recall score.
     import { goto } from "$app/navigation";
     import { page } from "$app/stores";
     import { onMount } from "svelte";
+    import { fly } from "svelte/transition";
 
     import { postJson } from "../lib/api";
+    import Icon from "../lib/Icon.svelte";
     import { playStart } from "../lib/sound";
     import { SECTION_NAMES } from "../lib/types";
 
@@ -110,6 +112,7 @@ Memory Recall score.
         </div>
     {:else if idx >= cards.length}
         <div class="mcat-card done">
+            <div class="done-check"><Icon name="check" size={36} /></div>
             <h2>Deck Complete</h2>
             <p class="mcat-muted">You reviewed {cards.length} cards.</p>
             <div class="row">
@@ -130,15 +133,26 @@ Memory Recall score.
             <span class="counter">Card {idx + 1} Of {cards.length}</span>
         </div>
 
-        <div class="mcat-card flashcard">
-            {#if section}<div class="fc-section">
-                    {SECTION_NAMES[section] ?? section}
-                </div>{/if}
-            <div class="front">{card.front}</div>
-            {#if revealed}
-                <hr />
-                <div class="back">{card.back}</div>
-            {/if}
+        <div class="scene">
+            {#key idx}
+                <div
+                    class="card3d"
+                    class:flipped={revealed}
+                    in:fly={{ y: 18, duration: 260 }}
+                >
+                    <div class="face front mcat-card">
+                        {#if section}<div class="fc-section">
+                                {SECTION_NAMES[section] ?? section}
+                            </div>{/if}
+                        <div class="fc-label">Question</div>
+                        <div class="fc-text">{card.front}</div>
+                    </div>
+                    <div class="face back mcat-card">
+                        <div class="fc-label green">Answer</div>
+                        <div class="fc-text answer">{card.back}</div>
+                    </div>
+                </div>
+            {/key}
         </div>
 
         {#if !revealed}
@@ -196,15 +210,36 @@ Memory Recall score.
         font-weight: 600;
         color: var(--mcat-muted);
     }
-    .flashcard {
-        min-height: 260px;
+    /* 3D flip scene: the card rotates on its Y axis to reveal the answer. */
+    .scene {
+        perspective: 1600px;
+    }
+    .card3d {
+        position: relative;
+        min-height: 280px;
+        transform-style: preserve-3d;
+        /* Ease with a gentle overshoot near settle for a bit of weight. */
+        transition: transform 0.55s cubic-bezier(0.2, 0.75, 0.25, 1);
+        will-change: transform;
+    }
+    .card3d.flipped {
+        transform: rotateY(180deg);
+    }
+    .face {
+        position: absolute;
+        inset: 0;
         display: flex;
         flex-direction: column;
-        gap: 18px;
+        gap: 16px;
         text-align: center;
         align-items: center;
         justify-content: center;
         padding: 32px 28px;
+        backface-visibility: hidden;
+        -webkit-backface-visibility: hidden;
+    }
+    .face.back {
+        transform: rotateY(180deg);
     }
     .fc-section {
         font-size: 12px;
@@ -213,21 +248,30 @@ Memory Recall score.
         letter-spacing: 0.05em;
         color: var(--mcat-muted);
     }
-    .front {
+    .fc-label {
+        font-size: 12px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--mcat-muted);
+    }
+    .fc-label.green {
+        color: var(--mcat-green);
+    }
+    .fc-text {
         font-size: 23px;
         font-weight: 800;
         line-height: 1.35;
     }
-    hr {
-        border: none;
-        border-top: 1px solid var(--mcat-border);
-        width: 100%;
-        margin: 0;
+    .fc-text.answer {
+        font-size: 19px;
+        font-weight: 600;
+        line-height: 1.55;
     }
-    .back {
-        font-size: 18px;
-        line-height: 1.6;
-        color: var(--mcat-text);
+    @media (prefers-reduced-motion: reduce) {
+        .card3d {
+            transition: none;
+        }
     }
     .reveal {
         width: 100%;
@@ -269,6 +313,35 @@ Memory Recall score.
     }
     .done {
         text-align: center;
+    }
+    .done-check {
+        width: 60px;
+        height: 60px;
+        margin: 0 auto 12px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        background: var(--mcat-green);
+        box-shadow: 0 0 0 8px color-mix(in srgb, var(--mcat-green) 16%, transparent);
+        animation: checkpop 0.5s cubic-bezier(0.2, 0.8, 0.3, 1.3) both;
+    }
+    @keyframes checkpop {
+        0% {
+            transform: scale(0) rotate(-12deg);
+        }
+        70% {
+            transform: scale(1.12) rotate(3deg);
+        }
+        100% {
+            transform: scale(1) rotate(0);
+        }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .done-check {
+            animation: none;
+        }
     }
     .done h2 {
         margin-top: 0;

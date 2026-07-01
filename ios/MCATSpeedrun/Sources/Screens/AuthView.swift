@@ -25,6 +25,7 @@ struct AuthView: View {
                     Text("Memory · Performance · Readiness")
                         .font(Theme.font(15, .semibold)).foregroundStyle(Theme.muted)
                 }
+                .screenEnter(delay: 0.05)
 
                 VStack(spacing: 12) {
                     if isSignUp {
@@ -77,6 +78,7 @@ struct AuthView: View {
                     .padding(.top, 2)
                 }
                 .cardStyle()
+                .screenEnter(delay: 0.14)
 
                 if auth.working { ProgressView().tint(Theme.accent) }
             }

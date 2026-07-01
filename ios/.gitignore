@@ -1,6 +1,11 @@
 # Rust build output
 mcat-ffi/target/
 
+# Bundled OpenAI key for direct on-device AI (dev only; production uses a proxy).
+# Mirrors the desktop's gitignored pylib/anki/mcat/.openai_key. The committed
+# openai_key.example.txt shows the format.
+MCATSpeedrun/Resources/openai_key.txt
+
 # Generated Xcode project(s) + packaged engine (xcodegen regenerates these;
 # the wildcard also covers iCloud "MCATSpeedrun 2.xcodeproj" style duplicates)
 MCATSpeedrun/*.xcodeproj/

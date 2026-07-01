@@ -49,6 +49,13 @@ final class AppState: ObservableObject {
     // low-confidence readiness estimate (mirrors desktop). Synced.
     @Published var diagnosticKind: String? { didSet { syncHook?() } }
     var diagnosticDone: Bool { diagnosticKind != nil }
+    // Date ("yyyy-MM-dd") of the most recent diagnostic (initial or daily). The
+    // daily diagnostic is available once this isn't today; synced across devices
+    // so one diagnostic per day counts for both apps.
+    @Published var lastDiagnosticDate: String? { didSet { syncHook?() } }
+    var dailyDiagnosticAvailable: Bool {
+        lastDiagnosticDate != AppState.dayString(Date())
+    }
     // AI features on/off (on by default); off = the no-AI experience. Synced.
     @Published var aiEnabled: Bool = true { didSet { syncHook?() } }
     // The roadmap block currently being worked on (so finishing it marks it done).
@@ -160,6 +167,23 @@ final class AppState: ObservableObject {
         completedKeys.removeAll()
         activeLaunchKey = nil
         syncHook?()
+    }
+
+    // MARK: Diagnostic
+
+    /// Record that today's diagnostic (initial or daily) is complete; synced.
+    func markDiagnosticDone() {
+        lastDiagnosticDate = AppState.dayString(Date())
+    }
+
+    /// Keep the most informative diagnostic kind (best_estimate > standard >
+    /// quick) so a short daily run can't hide the readiness estimate a longer
+    /// diagnostic already unlocked.
+    func setDiagnosticKind(_ kind: String) {
+        let rank = ["quick": 1, "standard": 2, "best_estimate": 3]
+        if rank[kind, default: 0] >= rank[diagnosticKind ?? "", default: 0] {
+            diagnosticKind = kind
+        }
     }
 
     // MARK: Dates

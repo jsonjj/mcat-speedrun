@@ -9,8 +9,10 @@ correctness is decided on the backend.
 -->
 <script lang="ts">
     import { createEventDispatcher, onDestroy, onMount } from "svelte";
+    import { fly } from "svelte/transition";
 
     import { postJson } from "./api";
+    import Icon from "./Icon.svelte";
     import { CONFIDENCE_LABELS, SECTION_NAMES } from "./types";
     import type { FirstPassResponse, QuestionBatch, RevealResult } from "./types";
 
@@ -18,14 +20,21 @@ correctness is decided on the backend.
     export let phase = "daily";
     export let label = "Performance Set";
     export let accent = "var(--mcat-amber)";
-    export let seconds = 90;
+    export let seconds = 120;
     // When AI is on, the second pass asks the student to argue their answer, and
     // results carry personalized reasoning feedback.
     export let aiEnabled = false;
+    // The diagnostic sets this false: a single pass, no "take another look".
+    export let allowSecondPass = true;
 
     const dispatch = createEventDispatcher<{ complete: { results: RevealResult[] } }>();
 
-    type FirstAnswer = { choice: string; confidence: string; time_ms: number };
+    type FirstAnswer = {
+        choice: string;
+        confidence: string;
+        time_ms: number;
+        over_time: boolean;
+    };
     type SecondAnswer = { choice: string; reasoning: string };
 
     let stage: "first" | "feedback" | "second" | "results" = "first";
@@ -35,6 +44,8 @@ correctness is decided on the backend.
     let firstResp: FirstPassResponse | null = null;
     let results: RevealResult[] = [];
     let busy = false;
+    // Paginated results review: 5 questions per page with Back/Next.
+    let reviewPage = 0;
 
     let curChoice = "";
     let curConfidence = "";
@@ -46,7 +57,9 @@ correctness is decided on the backend.
     let timerId: ReturnType<typeof setInterval> | undefined;
     onMount(() => {
         timerId = setInterval(() => {
-            if (timeLeft > 0 && (stage === "first" || stage === "second")) {
+            // Count into overtime (negative) rather than stopping — we never
+            // auto-skip; going long just flags the question (fed to the coach).
+            if (stage === "first" || stage === "second") {
                 timeLeft -= 1;
             }
         }, 1000);
@@ -55,11 +68,16 @@ correctness is decided on the backend.
     function resetTimer(): void {
         timeLeft = seconds;
     }
-    $: mmss = `${Math.floor(timeLeft / 60)}:${String(timeLeft % 60).padStart(2, "0")}`;
+    $: overtime = timeLeft < 0;
+    $: mmss = overtime
+        ? `+${Math.floor(-timeLeft / 60)}:${String(-timeLeft % 60).padStart(2, "0")}`
+        : `${Math.floor(timeLeft / 60)}:${String(timeLeft % 60).padStart(2, "0")}`;
 
     $: total = batch.questions.length;
     $: q = batch.questions[idx];
     $: progressPct = total ? (idx / total) * 100 : 0;
+    $: pageCount = Math.max(1, Math.ceil(results.length / 5));
+    $: pageItems = results.slice(reviewPage * 5, reviewPage * 5 + 5);
 
     $: wrongCount = firstResp?.wrong_count ?? 0;
     $: changedCount = countChanged(curChoice, idx, secondAnswers);
@@ -93,10 +111,12 @@ correctness is decided on the backend.
         if (!curChoice || !curConfidence) {
             return;
         }
+        const elapsed = Date.now() - questionStart;
         firstAnswers[q.note_id] = {
             choice: curChoice,
             confidence: curConfidence,
-            time_ms: Date.now() - questionStart,
+            time_ms: elapsed,
+            over_time: elapsed > seconds * 1000,
         };
         if (idx + 1 < total) {
             idx += 1;
@@ -116,6 +136,7 @@ correctness is decided on the backend.
             firstResp = await postJson<FirstPassResponse>("mcatSubmitFirst", {
                 batch_id: batch.batch_id,
                 phase,
+                single_pass: !allowSecondPass,
                 answers,
             });
             if (firstResp.reveal) {
@@ -208,82 +229,94 @@ correctness is decided on the backend.
                 <span class="dot"></span>
                 {label} · {SECTION_NAMES[q.section] ?? q.section} · Item {idx + 1} Of {total}
             </span>
-            <span class="timer" class:low={timeLeft <= 10}>{mmss}</span>
+            <span
+                class="timer"
+                class:low={!overtime && timeLeft <= 10}
+                class:over={overtime}
+            >
+                {#if overtime}<span class="over-tag">Over</span>{/if}{mmss}
+            </span>
         </div>
         <div class="pbar"><span style={`width:${progressPct}%`}></span></div>
 
         <div class="qrow">
-            <div class="mcat-card question">
-                <div class="qtext">{q.question}</div>
-                <div class="choices">
-                    {#each q.choices as choice (choice.key)}
-                        <label class="choice" class:selected={curChoice === choice.key}>
-                            <input
-                                type="radio"
-                                name={`q-${q.note_id}-${stage}`}
-                                value={choice.key}
-                                bind:group={curChoice}
-                            />
-                            <span class="ck">{choice.key}</span>
-                            <span class="ctext">{choice.text}</span>
-                            {#if stage === "second" && firstPick(q.note_id) === choice.key}
-                                <span class="firstpick">First pick</span>
-                            {/if}
-                        </label>
-                    {/each}
-                </div>
-
-                {#if stage === "first"}
-                    <div class="conf">
-                        <div class="conf-label">
-                            How Confident Are You In This Answer?
-                        </div>
-                        <div class="seg">
-                            {#each CONFIDENCE_LABELS as c (c.key)}
-                                <button
-                                    type="button"
-                                    class="seg-btn"
-                                    class:on={curConfidence === c.key}
-                                    on:click={() => (curConfidence = c.key)}
-                                >
-                                    {c.label}
-                                </button>
-                            {/each}
-                        </div>
+            {#key idx}
+                <div class="mcat-card question" in:fly={{ x: 24, duration: 240 }}>
+                    <div class="qtext">{q.question}</div>
+                    <div class="choices">
+                        {#each q.choices as choice (choice.key)}
+                            <label
+                                class="choice"
+                                class:selected={curChoice === choice.key}
+                            >
+                                <input
+                                    type="radio"
+                                    name={`q-${q.note_id}-${stage}`}
+                                    value={choice.key}
+                                    bind:group={curChoice}
+                                />
+                                <span class="ck">{choice.key}</span>
+                                <span class="ctext">{choice.text}</span>
+                                {#if stage === "second" && firstPick(q.note_id) === choice.key}
+                                    <span class="firstpick">First pick</span>
+                                {/if}
+                            </label>
+                        {/each}
                     </div>
-                {:else if aiEnabled}
-                    <div class="reasoning">
-                        <label class="reasoning-label" for="reasoning">
-                            Argue your answer — why is it right?
-                        </label>
-                        <textarea
-                            id="reasoning"
-                            class="reasoning-input"
-                            rows="3"
-                            bind:value={curReasoning}
-                            placeholder="Explain your reasoning. Your coach will respond to this."
-                        ></textarea>
-                    </div>
-                {:else}
-                    <p class="second-hint">
-                        Second pass — take another look and lock in your final answer.
-                    </p>
-                {/if}
 
-                <div class="actions">
-                    <button
-                        class="mcat-btn mcat-btn-primary"
-                        disabled={busy ||
-                            !curChoice ||
-                            (stage === "first"
-                                ? !curConfidence
-                                : aiEnabled && curReasoning.trim().length < 3)}
-                        on:click={stage === "first" ? nextFirst : nextSecond}
-                    >
-                        {idx + 1 < total ? "Submit & Next" : "Submit Response"}
-                    </button>
+                    {#if stage === "first"}
+                        <div class="conf">
+                            <div class="conf-label">
+                                How Confident Are You In This Answer?
+                            </div>
+                            <div class="seg">
+                                {#each CONFIDENCE_LABELS as c (c.key)}
+                                    <button
+                                        type="button"
+                                        class="seg-btn"
+                                        class:on={curConfidence === c.key}
+                                        on:click={() => (curConfidence = c.key)}
+                                    >
+                                        {c.label}
+                                    </button>
+                                {/each}
+                            </div>
+                        </div>
+                    {:else if aiEnabled}
+                        <div class="reasoning">
+                            <label class="reasoning-label" for="reasoning">
+                                Argue your answer — why is it right?
+                            </label>
+                            <textarea
+                                id="reasoning"
+                                class="reasoning-input"
+                                rows="3"
+                                bind:value={curReasoning}
+                                placeholder="Explain your reasoning. Your coach will respond to this."
+                            ></textarea>
+                        </div>
+                    {:else}
+                        <p class="second-hint">
+                            Second pass — take another look and lock in your final
+                            answer.
+                        </p>
+                    {/if}
+
+                    <div class="actions">
+                        <button
+                            class="mcat-btn mcat-btn-primary"
+                            disabled={busy ||
+                                !curChoice ||
+                                (stage === "first"
+                                    ? !curConfidence
+                                    : aiEnabled && curReasoning.trim().length < 3)}
+                            on:click={stage === "first" ? nextFirst : nextSecond}
+                        >
+                            {idx + 1 < total ? "Submit & Next" : "Submit Response"}
+                        </button>
+                    </div>
                 </div>
-            </div>
+            {/key}
 
             {#if stage === "second"}
                 <aside class="side">
@@ -313,35 +346,60 @@ correctness is decided on the backend.
     {:else}
         <div class="results">
             <div class="mcat-card rsummary">
+                <div class="rcheck"><Icon name="check" size={40} /></div>
                 <div class="fb-title">Results</div>
                 <p class="mcat-muted">
                     First-answer correct: {results.filter((r) => r.first_correct)
                         .length}/{results.length}
                 </p>
             </div>
-            {#each results as r (r.note_id)}
-                <div class="mcat-card result" class:good={r.first_correct}>
+
+            <div class="review-title">
+                Review your answers ({results.length})
+            </div>
+
+            {#each pageItems as r, i (r.note_id)}
+                <div
+                    class="mcat-card result big"
+                    class:good={r.first_correct}
+                    in:fly={{ y: 16, duration: 300, delay: i * 60 }}
+                >
+                    <div class="result-head">
+                        <span class="result-num">
+                            Question {reviewPage * 5 + i + 1} of {results.length}
+                        </span>
+                        <span class="verdict {r.first_correct ? 'g' : 'b'}">
+                            {r.first_correct ? "Correct" : "Missed"}
+                        </span>
+                    </div>
                     <div class="result-q">{questionById(r.note_id)}</div>
                     <div class="result-line">
-                        <span class="rp {r.first_correct ? 'g' : 'b'}">
-                            first: {r.first_correct ? "correct" : "missed"}
-                        </span>
                         {#if r.second_correct !== undefined}
                             <span class="rp {r.second_correct ? 'g' : 'b'}">
-                                second: {r.second_correct ? "correct" : "missed"}
+                                second try: {r.second_correct ? "correct" : "missed"}
                             </span>
                         {/if}
-                        <span class="rp">answer: {r.correct}</span>
+                        <span class="rp answer">Correct answer: {r.correct}</span>
                         {#if r.label}<span class="rp">{labelText(r.label)}</span>{/if}
                     </div>
-                    {#if r.explanation}<p class="explanation">{r.explanation}</p>{/if}
+                    {#if r.explanation}
+                        <div class="why">
+                            <div class="why-label">
+                                Why {r.first_correct ? "it's right" : "the answer is"}
+                                {r.correct}
+                            </div>
+                            <p class="explanation">{r.explanation}</p>
+                        </div>
+                    {/if}
                     {#if r.ai_feedback}
                         <div class="ai-feedback">
                             <div class="ai-head">
                                 <span class="ai-badge ai-{r.ai_feedback.verdict}">
                                     {labelText(r.ai_feedback.verdict)}
                                 </span>
-                                <span class="ai-tag">Coach feedback on your reasoning</span>
+                                <span class="ai-tag">
+                                    Coach feedback on your reasoning
+                                </span>
                             </div>
                             <p class="ai-text">{r.ai_feedback.feedback}</p>
                             {#if r.ai_feedback.key_point}
@@ -355,8 +413,29 @@ correctness is decided on the backend.
                     {/if}
                 </div>
             {/each}
+
+            {#if pageCount > 1}
+                <div class="pager">
+                    <button
+                        class="mcat-btn pager-btn"
+                        disabled={reviewPage === 0}
+                        on:click={() => (reviewPage -= 1)}
+                    >
+                        ← Back
+                    </button>
+                    <span class="pager-info">Page {reviewPage + 1} of {pageCount}</span>
+                    <button
+                        class="mcat-btn pager-btn"
+                        disabled={reviewPage >= pageCount - 1}
+                        on:click={() => (reviewPage += 1)}
+                    >
+                        Next →
+                    </button>
+                </div>
+            {/if}
+
             <button
-                class="mcat-btn mcat-btn-primary"
+                class="mcat-btn mcat-btn-primary done-btn"
                 on:click={() => dispatch("complete", { results })}
             >
                 Done
@@ -404,6 +483,36 @@ correctness is decided on the backend.
         color: var(--mcat-red);
         background: color-mix(in srgb, var(--mcat-red) 14%, var(--mcat-surface));
         border-color: color-mix(in srgb, var(--mcat-red) 30%, var(--mcat-border));
+    }
+    /* Over the limit: shine red and pulse. We never auto-skip — this just flags
+       that the question ran long (fed to the coach). */
+    .timer.over {
+        color: #fff;
+        background: var(--mcat-red);
+        border-color: var(--mcat-red);
+        animation: timerPulse 1s ease-in-out infinite;
+    }
+    .over-tag {
+        font-size: 10px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-right: 6px;
+        opacity: 0.9;
+    }
+    @keyframes timerPulse {
+        0%,
+        100% {
+            box-shadow: 0 0 0 0 color-mix(in srgb, var(--mcat-red) 55%, transparent);
+        }
+        50% {
+            box-shadow: 0 0 0 7px color-mix(in srgb, var(--mcat-red) 0%, transparent);
+        }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .timer.over {
+            animation: none;
+        }
     }
     .pbar {
         height: 6px;
@@ -590,23 +699,99 @@ correctness is decided on the backend.
         flex-direction: column;
         gap: 12px;
     }
+    .rsummary {
+        text-align: center;
+    }
+    .rcheck {
+        width: 64px;
+        height: 64px;
+        margin: 0 auto 12px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        background: var(--mcat-green);
+        box-shadow: 0 0 0 8px color-mix(in srgb, var(--mcat-green) 16%, transparent);
+        animation: checkpop 0.5s cubic-bezier(0.2, 0.8, 0.3, 1.3) both;
+    }
+    @keyframes checkpop {
+        0% {
+            transform: scale(0) rotate(-12deg);
+        }
+        70% {
+            transform: scale(1.12) rotate(3deg);
+        }
+        100% {
+            transform: scale(1) rotate(0);
+        }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .rcheck {
+            animation: none;
+        }
+    }
+    .review-title {
+        font-weight: 800;
+        font-size: 16px;
+        margin: 2px 2px 0;
+        color: var(--mcat-text);
+    }
+    .result.big {
+        padding: 22px 24px;
+    }
+    .result-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 10px;
+    }
+    .result-num {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--mcat-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+    .verdict {
+        font-size: 13px;
+        font-weight: 800;
+        border-radius: 999px;
+        padding: 4px 12px;
+    }
+    .verdict.g {
+        color: var(--mcat-green);
+        background: color-mix(in srgb, var(--mcat-green) 14%, var(--mcat-surface));
+    }
+    .verdict.b {
+        color: var(--mcat-red);
+        background: color-mix(in srgb, var(--mcat-red) 14%, var(--mcat-surface));
+    }
     .result-q {
-        font-weight: 600;
-        margin-bottom: 8px;
+        font-weight: 700;
+        font-size: 18px;
+        line-height: 1.5;
+        margin-bottom: 12px;
     }
     .result-line {
         display: flex;
         gap: 8px;
         flex-wrap: wrap;
-        margin-bottom: 8px;
+        margin-bottom: 12px;
     }
     .rp {
-        font-size: 12px;
+        font-size: 13px;
         font-weight: 600;
         border-radius: 999px;
-        padding: 3px 10px;
+        padding: 4px 12px;
         border: 1px solid var(--mcat-border);
         color: var(--mcat-muted);
+    }
+    .rp.answer {
+        color: var(--mcat-accent);
+        border-color: color-mix(in srgb, var(--mcat-accent) 35%, var(--mcat-border));
+        font-weight: 700;
     }
     .rp.g {
         color: var(--mcat-green);
@@ -616,10 +801,44 @@ correctness is decided on the backend.
         color: var(--mcat-red);
         border-color: color-mix(in srgb, var(--mcat-red) 35%, var(--mcat-border));
     }
+    .why {
+        background: var(--mcat-surface-2);
+        border-radius: 12px;
+        padding: 14px 16px;
+    }
+    .why-label {
+        font-size: 13px;
+        font-weight: 800;
+        color: var(--mcat-text);
+        margin-bottom: 6px;
+    }
     .explanation {
         margin: 0;
-        font-size: 15px;
+        font-size: 16px;
+        line-height: 1.6;
+        color: var(--mcat-text);
+    }
+    .pager {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 4px;
+    }
+    .pager-btn {
+        min-width: 110px;
+    }
+    .pager-btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+    }
+    .pager-info {
+        font-size: 14px;
+        font-weight: 700;
         color: var(--mcat-muted);
+    }
+    .done-btn {
+        margin-top: 8px;
     }
     .reasoning {
         display: flex;

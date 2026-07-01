@@ -24,7 +24,7 @@ import urllib.request
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from anki.mcat import schema, store
+from anki.mcat import store
 
 if TYPE_CHECKING:
     import anki.collection
@@ -220,6 +220,7 @@ def _local_payload(col: anki.collection.Collection) -> dict[str, Any]:
         "roadmapDate": plan.get("date") or "",
         "mcatLogDesktop": json.dumps(store.get_mcat_log(col)),
         "diagnosticKind": profile.get("diagnostic_kind") or "",
+        "lastDiagnosticDate": profile.get("last_diagnostic_date") or "",
         "aiEnabled": bool(profile.get("ai_enabled", True)),
     }
 
@@ -298,6 +299,13 @@ def pull(col: anki.collection.Collection) -> str:
         updates["diagnostic_kind"] = remote["diagnosticKind"]
     if "aiEnabled" in remote:
         updates["ai_enabled"] = bool(remote["aiEnabled"])
+    if "lastDiagnosticDate" in remote:
+        # Keep the later date so a device that hasn't caught up can't undo the
+        # "done today" state (ISO date strings compare lexically).
+        rd = str(remote.get("lastDiagnosticDate") or "")
+        ld = str(store.get_profile(col).get("last_diagnostic_date") or "")
+        best = max(rd, ld)
+        updates["last_diagnostic_date"] = best or None
     if updates:
         store.update_profile(col, **updates)
     if "streak" in remote or "streakDate" in remote:

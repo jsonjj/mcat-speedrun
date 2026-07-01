@@ -12,6 +12,8 @@ struct DashboardView: View {
 
     @State private var showMastery = false
     @State private var draft: Double = 80
+    @State private var coach: CoachRecommendation?
+    @State private var coachLoading = false
 
     private var model: DashboardModel { Scoring.model(app: app, progress: progress) }
 
@@ -23,6 +25,7 @@ struct DashboardView: View {
                 togglesRow
                 if app.isDev { devMasteryButton }
                 if !app.diagnosticDone { diagnosticPrompt }
+                if let coach { coachCard(coach) }
 
                 ringSection
 
@@ -49,6 +52,81 @@ struct DashboardView: View {
         .screenBackground()
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showMastery) { masterySheet }
+        .onAppear { loadCoachIfNeeded() }
+        .onChange(of: app.aiEnabled) { _, _ in
+            coach = nil
+            loadCoachIfNeeded()
+        }
+    }
+
+    // MARK: - AI study coach
+
+    private func coachCard(_ rec: CoachRecommendation) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10).fill(
+                    LinearGradient(
+                        colors: [Theme.accent, Theme.accent2],
+                        startPoint: .topLeading, endPoint: .bottomTrailing))
+                Image(systemName: "target")
+                    .font(Theme.font(18, .bold))
+                    .foregroundStyle(.white)
+            }
+            .frame(width: 40, height: 40)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Text("YOUR AI COACH")
+                        .font(Theme.font(11, .heavy))
+                        .foregroundStyle(Theme.accent)
+                    if let word = sectionWord(rec.section) {
+                        Pill(text: word, color: Theme.muted)
+                    }
+                }
+                if !rec.headline.isEmpty {
+                    Text(rec.headline)
+                        .font(Theme.font(17, .bold))
+                        .foregroundStyle(Theme.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if !rec.detail.isEmpty {
+                    Text(rec.detail)
+                        .font(Theme.font(14))
+                        .foregroundStyle(Theme.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Text("Source: \(rec.source)")
+                    .font(Theme.font(12)).italic()
+                    .foregroundStyle(Theme.muted)
+            }
+            Spacer(minLength: 0)
+        }
+        .cardStyle(tint: Theme.accent)
+    }
+
+    private func sectionWord(_ code: String) -> String? {
+        SectionCode(rawValue: code)?.word
+    }
+
+    /// Fetch the coach when AI is on, a key is present, and there's evidence to
+    /// coach on. Fail-safe + non-blocking: any failure leaves the card hidden.
+    private func loadCoachIfNeeded() {
+        guard app.aiEnabled, AIClient.available,
+            Scoring.hasEvidence(app: app, progress: progress)
+        else {
+            coach = nil
+            return
+        }
+        guard !coachLoading else { return }
+        coachLoading = true
+        let facts = Scoring.coachFactsJSON(app: app, progress: progress)
+        Task {
+            let rec = await AIClient.coachRecommendation(factsJSON: facts)
+            await MainActor.run {
+                coach = rec
+                coachLoading = false
+            }
+        }
     }
 
     // MARK: - Top toggles (sound + dark mode)

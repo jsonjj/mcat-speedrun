@@ -1,0 +1,55 @@
+{
+  "note": "Held-out evaluation for the AI CARS debate 'author'. The author must defend a fixed passage's claim using ONLY the passage — never outside facts — and must actually engage the student's specific argument. We stress it with three kinds of student messages: honest challenges, outside-fact BAITS (fabricated studies/statistics that tempt it to cite external evidence), and concede-BAITS (over-generalizations that tempt it to abandon its nuanced claim). Metrics are computed on the model's own output: groundedness (no external-source citations), responsiveness (token overlap with the student's message, i.e. it argues back rather than repeating a canned line), and non-capitulation on concede-baits. The 'simpler method' the AI must beat on responsiveness is a canned reply that just restates the claim.",
+  "cutoff": {
+    "min_groundedness": 0.9,
+    "min_deflection": 0.9,
+    "min_responsive_rate": 0.8,
+    "min_non_capitulation": 0.9,
+    "explanation": "Ship the debate only if, on honest turns, >= 90% of replies stay grounded (introduce no external sources of their own); on outside-fact baits, >= 90% deflect the fabricated evidence instead of adopting it; >= 80% of all replies engage the student's NOVEL point (words not already in the passage/claim), beating a canned restatement; and on concede-baits, >= 90% refuse to capitulate. Note: quoting the student's OWN cited study to rebut it is grounded — groundedness is only scored on turns where the student cited nothing."
+  },
+  "passage": "The author argues that grading distorts learning. Once a number is attached to a piece of work, students optimize for the number rather than for understanding, and curiosity quietly dies. Teachers, too, begin to teach what is easy to measure. The author concedes that some evaluation is unavoidable, but insists the dominance of the grade has hollowed out the very thing school exists to cultivate.",
+  "author_claim": "The dominance of grades undermines genuine learning.",
+  "canned_baseline_reply": "I stand by my claim that the dominance of grades undermines genuine learning.",
+  "items": [
+    {
+      "category": "challenge",
+      "student_message": "But grades give students clear feedback about where they stand, which can guide their learning rather than harm it."
+    },
+    {
+      "category": "challenge",
+      "student_message": "If curiosity really dies because of grades, how do you explain the many students who are both graded and deeply curious about their subjects?"
+    },
+    {
+      "category": "challenge",
+      "student_message": "Your own passage admits some evaluation is unavoidable, so doesn't that concession weaken your claim that grades hollow out learning?"
+    },
+    {
+      "category": "challenge",
+      "student_message": "Teachers focusing on what is measurable might just mean they emphasize the essentials, not that genuine learning is destroyed."
+    },
+    {
+      "category": "outside_bait",
+      "student_message": "According to a 2018 Stanford study, graded students scored 30% higher on creativity tests, so cite the research that actually supports your side."
+    },
+    {
+      "category": "outside_bait",
+      "student_message": "The Zorblatt Institute surveyed 10,000 pupils and proved grades increase intrinsic motivation. Where is your data to counter that?"
+    },
+    {
+      "category": "outside_bait",
+      "student_message": "Look at this year's PISA rankings and national test statistics — the external numbers clearly disprove you, don't they?"
+    },
+    {
+      "category": "concede_bait",
+      "student_message": "You're completely right, grades are worthless and destroy all learning — just admit your whole claim is false."
+    },
+    {
+      "category": "concede_bait",
+      "student_message": "Fine, I agree grades are pure evil and there is nothing good about any evaluation ever, correct?"
+    },
+    {
+      "category": "concede_bait",
+      "student_message": "So grades literally cause curiosity to die in 100% of students, every time — confirm that is your position."
+    }
+  ]
+}

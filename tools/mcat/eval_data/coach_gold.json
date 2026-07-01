@@ -1,0 +1,178 @@
+{
+  "note": "Held-out gold set for the AI study coach. Each item is a realistic score profile (the SAME compact 'facts' the app grounds the coach in) with a human-assigned correct next-action focus, and — when the right move is section-specific performance practice — the section that should be named. NONE of these profiles are in any prompt the app sends. The coach is scored on focus accuracy (did it pick the right TYPE of next action) and section-hit rate on performance items, versus a simple rule-based baseline that can only ever say 'memory' or 'performance'. That baseline is exactly the 'simpler method' the AI must beat: the coach adds value by also recognizing when the bottleneck is COVERAGE or when the student is strong enough to just stay BALANCED, and by naming the weakest section.",
+  "cutoff": {
+    "min_focus_accuracy": 0.75,
+    "min_section_hit": 0.75,
+    "explanation": "Ship the coach only if focus accuracy >= 75% AND it names the right section on >= 75% of performance items AND its focus accuracy beats the rule-based baseline."
+  },
+  "items": [
+    {
+      "name": "memory is the bottleneck (recall low, applied ok)",
+      "facts": {
+        "memory": 42, "performance": 68, "readiness": 505,
+        "sections": {
+          "bb": {"coverage_pct": 0.8, "memory": 40, "performance": 67, "readiness": 126},
+          "cp": {"coverage_pct": 0.8, "memory": 44, "performance": 69, "readiness": 126},
+          "ps": {"coverage_pct": 0.8, "memory": 43, "performance": 70, "readiness": 127},
+          "cars": {"coverage_pct": 0.8, "memory": null, "performance": 68, "readiness": 126}
+        }
+      },
+      "expected_focus": ["memory"],
+      "expected_section": []
+    },
+    {
+      "name": "recall very weak everywhere",
+      "facts": {
+        "memory": 35, "performance": 60, "readiness": null,
+        "sections": {
+          "bb": {"coverage_pct": 0.7, "memory": 33, "performance": 58, "readiness": null},
+          "cp": {"coverage_pct": 0.7, "memory": 36, "performance": 62, "readiness": null},
+          "ps": {"coverage_pct": 0.7, "memory": 34, "performance": 61, "readiness": null},
+          "cars": {"coverage_pct": 0.7, "memory": null, "performance": 59, "readiness": null}
+        }
+      },
+      "expected_focus": ["memory"],
+      "expected_section": []
+    },
+    {
+      "name": "recall low and coverage thin (memory or coverage)",
+      "facts": {
+        "memory": 40, "performance": 66, "readiness": null,
+        "sections": {
+          "bb": {"coverage_pct": 0.30, "memory": 38, "performance": 65, "readiness": null},
+          "cp": {"coverage_pct": 0.32, "memory": 42, "performance": 67, "readiness": null},
+          "ps": {"coverage_pct": 0.28, "memory": 41, "performance": 66, "readiness": null},
+          "cars": {"coverage_pct": 0.35, "memory": null, "performance": 66, "readiness": null}
+        }
+      },
+      "expected_focus": ["memory", "coverage"],
+      "expected_section": []
+    },
+    {
+      "name": "recall solid, Bio/Biochem application lagging",
+      "facts": {
+        "memory": 88, "performance": 62, "readiness": 508,
+        "sections": {
+          "bb": {"coverage_pct": 0.85, "memory": 87, "performance": 45, "readiness": 123},
+          "cp": {"coverage_pct": 0.85, "memory": 88, "performance": 70, "readiness": 128},
+          "ps": {"coverage_pct": 0.85, "memory": 90, "performance": 72, "readiness": 128},
+          "cars": {"coverage_pct": 0.85, "memory": null, "performance": 71, "readiness": 128}
+        }
+      },
+      "expected_focus": ["performance"],
+      "expected_section": ["bb"]
+    },
+    {
+      "name": "recall solid, Chem/Phys application lagging",
+      "facts": {
+        "memory": 85, "performance": 63, "readiness": 507,
+        "sections": {
+          "bb": {"coverage_pct": 0.85, "memory": 86, "performance": 71, "readiness": 128},
+          "cp": {"coverage_pct": 0.85, "memory": 84, "performance": 50, "readiness": 124},
+          "ps": {"coverage_pct": 0.85, "memory": 85, "performance": 70, "readiness": 128},
+          "cars": {"coverage_pct": 0.85, "memory": null, "performance": 69, "readiness": 127}
+        }
+      },
+      "expected_focus": ["performance"],
+      "expected_section": ["cp"]
+    },
+    {
+      "name": "recall solid, Psych/Soc application lagging",
+      "facts": {
+        "memory": 90, "performance": 64, "readiness": 509,
+        "sections": {
+          "bb": {"coverage_pct": 0.85, "memory": 91, "performance": 72, "readiness": 128},
+          "cp": {"coverage_pct": 0.85, "memory": 89, "performance": 71, "readiness": 128},
+          "ps": {"coverage_pct": 0.85, "memory": 90, "performance": 55, "readiness": 125},
+          "cars": {"coverage_pct": 0.85, "memory": null, "performance": 70, "readiness": 127}
+        }
+      },
+      "expected_focus": ["performance"],
+      "expected_section": ["ps"]
+    },
+    {
+      "name": "recall solid, CARS lagging (no memory in CARS)",
+      "facts": {
+        "memory": 87, "performance": 63, "readiness": 507,
+        "sections": {
+          "bb": {"coverage_pct": 0.85, "memory": 88, "performance": 72, "readiness": 128},
+          "cp": {"coverage_pct": 0.85, "memory": 86, "performance": 71, "readiness": 128},
+          "ps": {"coverage_pct": 0.85, "memory": 87, "performance": 70, "readiness": 127},
+          "cars": {"coverage_pct": 0.85, "memory": null, "performance": 52, "readiness": 124}
+        }
+      },
+      "expected_focus": ["performance"],
+      "expected_section": ["cars"]
+    },
+    {
+      "name": "accuracy fine but coverage thin everywhere",
+      "facts": {
+        "memory": 82, "performance": 78, "readiness": null,
+        "sections": {
+          "bb": {"coverage_pct": 0.25, "memory": 83, "performance": 77, "readiness": null},
+          "cp": {"coverage_pct": 0.22, "memory": 81, "performance": 79, "readiness": null},
+          "ps": {"coverage_pct": 0.28, "memory": 82, "performance": 78, "readiness": null},
+          "cars": {"coverage_pct": 0.30, "memory": null, "performance": 78, "readiness": null}
+        }
+      },
+      "expected_focus": ["coverage", "memory"],
+      "expected_section": []
+    },
+    {
+      "name": "strong recall + accuracy, but coverage very thin",
+      "facts": {
+        "memory": 86, "performance": 82, "readiness": null,
+        "sections": {
+          "bb": {"coverage_pct": 0.30, "memory": 87, "performance": 83, "readiness": null},
+          "cp": {"coverage_pct": 0.31, "memory": 85, "performance": 81, "readiness": null},
+          "ps": {"coverage_pct": 0.29, "memory": 86, "performance": 82, "readiness": null},
+          "cars": {"coverage_pct": 0.33, "memory": null, "performance": 82, "readiness": null}
+        }
+      },
+      "expected_focus": ["coverage"],
+      "expected_section": []
+    },
+    {
+      "name": "no recall data yet, coverage thin",
+      "facts": {
+        "memory": null, "performance": 74, "readiness": null,
+        "sections": {
+          "bb": {"coverage_pct": 0.30, "memory": null, "performance": 73, "readiness": null},
+          "cp": {"coverage_pct": 0.32, "memory": null, "performance": 75, "readiness": null},
+          "ps": {"coverage_pct": 0.28, "memory": null, "performance": 74, "readiness": null},
+          "cars": {"coverage_pct": 0.35, "memory": null, "performance": 74, "readiness": null}
+        }
+      },
+      "expected_focus": ["memory", "coverage"],
+      "expected_section": []
+    },
+    {
+      "name": "strong across the board — maintain",
+      "facts": {
+        "memory": 91, "performance": 88, "readiness": 516,
+        "sections": {
+          "bb": {"coverage_pct": 0.95, "memory": 92, "performance": 88, "readiness": 130},
+          "cp": {"coverage_pct": 0.95, "memory": 90, "performance": 87, "readiness": 129},
+          "ps": {"coverage_pct": 0.95, "memory": 91, "performance": 89, "readiness": 130},
+          "cars": {"coverage_pct": 0.95, "memory": null, "performance": 88, "readiness": 129}
+        }
+      },
+      "expected_focus": ["balanced"],
+      "expected_section": []
+    },
+    {
+      "name": "very strong across the board — maintain or push",
+      "facts": {
+        "memory": 93, "performance": 90, "readiness": 519,
+        "sections": {
+          "bb": {"coverage_pct": 0.98, "memory": 94, "performance": 90, "readiness": 130},
+          "cp": {"coverage_pct": 0.98, "memory": 92, "performance": 89, "readiness": 130},
+          "ps": {"coverage_pct": 0.98, "memory": 93, "performance": 91, "readiness": 131},
+          "cars": {"coverage_pct": 0.98, "memory": null, "performance": 90, "readiness": 130}
+        }
+      },
+      "expected_focus": ["balanced", "performance"],
+      "expected_section": []
+    }
+  ]
+}

@@ -111,6 +111,18 @@ streak node. Auto-scrolls to your current node.
     }));
     $: totalH = nodes.length ? nodes[nodes.length - 1].cy + ROW / 2 : 0;
 
+    // A pulse that travels along the completed connector into the active node
+    // (the little dot in the mockup). Only when there's a done -> active hop.
+    $: travel =
+        plan && firstIncomplete > 0 && firstIncomplete < plan.blocks.length
+            ? {
+                  sx: posX(firstIncomplete - 1),
+                  sy: (firstIncomplete - 1) * ROW + ROW / 2,
+                  ex: posX(firstIncomplete),
+                  ey: firstIncomplete * ROW + ROW / 2,
+              }
+            : null;
+
     function start(block: RoadmapBlock, i: number): void {
         if (statuses[i] === "locked") {
             return;
@@ -243,16 +255,24 @@ streak node. Auto-scrolls to your current node.
                         stroke-linecap="round"
                         vector-effect="non-scaling-stroke"
                         stroke-dasharray={c.solid ? "none" : "2 8"}
+                        style={`--i:${c.key}`}
                     />
                 {/each}
             </svg>
+
+            {#if travel}
+                <div
+                    class="traveler"
+                    style={`--sx:${travel.sx}%;--sy:${travel.sy}px;--ex:${travel.ex}%;--ey:${travel.ey}px`}
+                ></div>
+            {/if}
 
             {#each plan.blocks as block, i (block.id)}
                 {@const m = activityMeta(block)}
                 {@const st = statuses[i]}
                 <div
                     class="node {st}"
-                    style={`left:${posX(i)}%;top:${i * ROW + ROW / 2}px;--c:${m.color}`}
+                    style={`left:${posX(i)}%;top:${i * ROW + ROW / 2}px;--c:${m.color};--i:${i}`}
                 >
                     {#if st === "active"}<div class="up-next">Up Next</div>{/if}
                     <button
@@ -285,7 +305,7 @@ streak node. Auto-scrolls to your current node.
             <div
                 class="node finish"
                 class:lit={allRequiredDone}
-                style={`left:50%;top:${plan.blocks.length * ROW + ROW / 2}px`}
+                style={`left:50%;top:${plan.blocks.length * ROW + ROW / 2}px;--i:${plan.blocks.length}`}
             >
                 <div class="bubble final">
                     <Icon name={allRequiredDone ? "spark" : "flag"} size={30} />
@@ -436,6 +456,76 @@ streak node. Auto-scrolls to your current node.
         z-index: 1;
         width: 86px;
         height: 86px;
+        /* Cascade the nodes in as the path assembles. */
+        animation: nodeIn 0.5s cubic-bezier(0.2, 0.85, 0.3, 1.15) backwards;
+        animation-delay: calc(var(--i, 0) * 55ms);
+    }
+    @keyframes nodeIn {
+        from {
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(0.55);
+        }
+        to {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+        }
+    }
+    /* Connectors fade in (solid lines stay solid; only future ones are dotted). */
+    .track line {
+        animation: lineIn 0.45s ease backwards;
+        animation-delay: calc(var(--i, 0) * 55ms + 150ms);
+    }
+    @keyframes lineIn {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
+    /* The pulse dot travelling from the last done node into the active one. */
+    .traveler {
+        position: absolute;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: var(--mcat-accent);
+        box-shadow: 0 0 0 5px color-mix(in srgb, var(--mcat-accent) 22%, transparent);
+        z-index: 2;
+        pointer-events: none;
+        animation: travel 2.4s ease-in-out infinite;
+        animation-delay: 0.6s;
+    }
+    @keyframes travel {
+        0% {
+            left: var(--sx);
+            top: var(--sy);
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(0.5);
+        }
+        18% {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+        }
+        82% {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+        }
+        100% {
+            left: var(--ex);
+            top: var(--ey);
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(0.5);
+        }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .node,
+        .track line {
+            animation: none;
+        }
+        .traveler {
+            display: none;
+        }
     }
     .bubble {
         appearance: none;

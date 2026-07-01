@@ -17,6 +17,7 @@ struct FlashcardsView: View {
     @State private var idx = 0
     @State private var revealed = false
     @State private var reported = false
+    @State private var doneIn = false
 
     init(sections: [SectionCode] = SectionCode.allCases, limit: Int = 12) {
         self.sections = sections
@@ -103,31 +104,48 @@ struct FlashcardsView: View {
         }
     }
 
-    // MARK: - Card
+    // MARK: - Card (3D flip on reveal)
 
     private func flashcardView(_ card: Flashcard) -> some View {
+        ZStack {
+            cardFace(section: card.section, label: "Question",
+                     labelColor: Theme.muted, text: card.front, big: true)
+                .opacity(revealed ? 0 : 1)
+            cardFace(section: nil, label: "Answer",
+                     labelColor: Theme.green, text: card.back, big: false)
+                .opacity(revealed ? 1 : 0)
+                // Pre-counter-rotate so the back reads correctly once flipped.
+                .rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0))
+        }
+        .rotation3DEffect(
+            .degrees(revealed ? 180 : 0), axis: (x: 0, y: 1, z: 0), perspective: 0.6
+        )
+        .animation(.spring(response: 0.5, dampingFraction: 0.82), value: revealed)
+        // Fresh identity per card so advancing eases the next one in.
+        .id(idx)
+        .transition(
+            .asymmetric(
+                insertion: .move(edge: .trailing).combined(with: .opacity),
+                removal: .opacity))
+    }
+
+    private func cardFace(
+        section: SectionCode?, label: String, labelColor: Color, text: String, big: Bool
+    ) -> some View {
         VStack(spacing: 14) {
             HStack {
-                Pill(text: card.section.abbr, color: sectionColor(card.section))
+                if let section {
+                    Pill(text: section.abbr, color: sectionColor(section))
+                }
                 Spacer()
-                Text(revealed ? "Answer" : "Question")
-                    .font(Theme.font(12, .bold))
-                    .foregroundStyle(Theme.muted)
+                Text(label).font(Theme.font(12, .bold)).foregroundStyle(labelColor)
             }
             Spacer(minLength: 12)
-            Text(card.front)
-                .font(Theme.font(22, .bold))
+            Text(text)
+                .font(Theme.font(big ? 22 : 19, big ? .bold : .semibold))
                 .foregroundStyle(Theme.text)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
-            if revealed {
-                Rectangle().fill(Theme.border).frame(height: 1)
-                Text(card.back)
-                    .font(Theme.font(18))
-                    .foregroundStyle(Theme.text)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
-            }
             Spacer(minLength: 12)
         }
         .frame(minHeight: 220)
@@ -167,6 +185,10 @@ struct FlashcardsView: View {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 48))
                 .foregroundStyle(Theme.green)
+                .scaleEffect(doneIn ? 1 : 0.2)
+                .opacity(doneIn ? 1 : 0)
+                .animation(.spring(response: 0.5, dampingFraction: 0.55), value: doneIn)
+                .onAppear { doneIn = true }
             Text("Review complete")
                 .font(Theme.font(22, .bold))
                 .foregroundStyle(Theme.text)
@@ -193,8 +215,11 @@ struct FlashcardsView: View {
             progress.recordReview(
                 section: cards[idx].section, cardKey: cards[idx].key, rating: rating)
         }
-        revealed = false
-        idx += 1
+        // Reset the flip and ease the next card in as one transaction.
+        withAnimation(.easeOut(duration: 0.3)) {
+            revealed = false
+            idx += 1
+        }
         if isComplete && !reported {
             reported = true
             app.completeActiveLaunch()

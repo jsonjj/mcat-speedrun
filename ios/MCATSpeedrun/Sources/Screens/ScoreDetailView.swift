@@ -16,14 +16,15 @@ struct ScoreDetailView: View {
 
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                heroCard(block)
+                heroCard(block).screenEnter(delay: 0.03)
 
                 Text(kind.means)
                     .font(Theme.font(17, .semibold))
                     .foregroundStyle(Theme.text)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .screenEnter(delay: 0.1)
 
-                factsCard(block)
+                factsCard(block).screenEnter(delay: 0.16)
             }
             .padding(16)
         }

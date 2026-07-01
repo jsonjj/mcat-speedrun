@@ -203,6 +203,30 @@ struct Question: Identifiable {
     var key: String = ""
 }
 
+// AI outputs (mirror the desktop web types). Every AI struct carries a `source`
+// naming what the model was grounded in, shown in the UI for traceability.
+struct AiFeedback {
+    var verdict: String  // "sound" | "partially_sound" | "flawed"
+    var feedback: String
+    var keyPoint: String
+    var source: String
+}
+
+struct CoachRecommendation {
+    var focus: String  // "memory" | "performance" | "coverage" | "balanced"
+    var section: String  // "bb" | "cp" | "ps" | "cars" | ""
+    var headline: String
+    var detail: String
+    var source: String
+}
+
+struct CarsDebateReply {
+    var reply: String
+    var critique: String
+    var skill: String
+    var source: String
+}
+
 struct CarsPrompt: Identifiable {
     let id = UUID()
     var prompt: String

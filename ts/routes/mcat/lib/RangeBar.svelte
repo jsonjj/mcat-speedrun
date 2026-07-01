@@ -6,6 +6,8 @@ A value range on a fixed scale: a track, a tinted low–high band, and a tick at
 the point estimate. Optional min/mid/max scale labels underneath.
 -->
 <script lang="ts">
+    import { onMount } from "svelte";
+
     export let min: number;
     export let max: number;
     export let low: number;
@@ -15,6 +17,12 @@ the point estimate. Optional min/mid/max scale labels underneath.
     export let scale = false;
     export let mid: number | null = null;
 
+    // Grow the band out from the point on first paint (see .fill transition).
+    let mounted = false;
+    onMount(() => {
+        mounted = true;
+    });
+
     $: span = Math.max(1, max - min);
     function pct(v: number): number {
         return Math.max(0, Math.min(100, ((v - min) / span) * 100));
@@ -22,6 +30,9 @@ the point estimate. Optional min/mid/max scale labels underneath.
     $: lowPct = pct(low);
     $: highPct = pct(high);
     $: pointPct = pct(point);
+    $: bandW = Math.max(highPct - lowPct, 2);
+    // Where the point sits inside the band, so scaleX grows outward from it.
+    $: originPct = Math.max(0, Math.min(100, ((pointPct - lowPct) / bandW) * 100));
     $: midVal = mid ?? Math.round((min + max) / 2);
 </script>
 
@@ -29,9 +40,14 @@ the point estimate. Optional min/mid/max scale labels underneath.
     <div class="track">
         <div
             class="fill"
-            style={`left:${lowPct}%;width:${Math.max(highPct - lowPct, 2)}%;background:${color}`}
+            class:mounted
+            style={`left:${lowPct}%;width:${bandW}%;background:${color};transform-origin:${originPct}% 50%`}
         ></div>
-        <div class="tick" style={`left:${pointPct}%;background:${color}`}></div>
+        <div
+            class="tick"
+            class:mounted
+            style={`left:${pointPct}%;background:${color}`}
+        ></div>
     </div>
     {#if scale}
         <div class="scale">
@@ -55,6 +71,14 @@ the point estimate. Optional min/mid/max scale labels underneath.
         bottom: 0;
         border-radius: 999px;
         opacity: 0.5;
+        transform: scaleX(0);
+        transition:
+            transform 0.7s cubic-bezier(0.2, 0.75, 0.25, 1),
+            left 0.4s ease,
+            width 0.4s ease;
+    }
+    .fill.mounted {
+        transform: scaleX(1);
     }
     .tick {
         position: absolute;
@@ -62,7 +86,27 @@ the point estimate. Optional min/mid/max scale labels underneath.
         bottom: -3px;
         width: 3px;
         border-radius: 2px;
-        transform: translateX(-50%);
+        transform: translateX(-50%) scaleY(0.3);
+        opacity: 0;
+        transition:
+            transform 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.3) 0.28s,
+            opacity 0.3s ease 0.28s,
+            left 0.4s ease;
+    }
+    .tick.mounted {
+        transform: translateX(-50%) scaleY(1);
+        opacity: 1;
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .fill {
+            transition: none;
+            transform: scaleX(1);
+        }
+        .tick {
+            transition: none;
+            opacity: 1;
+            transform: translateX(-50%);
+        }
     }
     .scale {
         display: flex;

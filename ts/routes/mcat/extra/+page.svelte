@@ -12,6 +12,7 @@ blocks are complete, so the highest-value work always comes first.
 
     import { postJson } from "../lib/api";
     import { SECTION_COLOR, textColor } from "../lib/blocks";
+    import DailyDiagnostic from "../lib/DailyDiagnostic.svelte";
     import Icon from "../lib/Icon.svelte";
     import { SECTION_NAMES } from "../lib/types";
     import type { Profile, RoadmapResponse } from "../lib/types";
@@ -22,6 +23,17 @@ blocks are complete, so the highest-value work always comes first.
     let loading = true;
     let phase = "";
     let aiEnabled = false;
+    let lastDiagDate: string | null = null;
+
+    function localDay(d: Date): string {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${y}-${m}-${day}`;
+    }
+    // Available once the stored date isn't today. mcatRoadmap pulls from the
+    // cloud first, so this reflects a diagnostic taken on the other device today.
+    $: diagAvailable = lastDiagDate !== localDay(new Date());
 
     async function load(): Promise<void> {
         loading = true;
@@ -31,6 +43,7 @@ blocks are complete, so the highest-value work always comes first.
         try {
             const p = await postJson<{ profile: Profile }>("mcatGetProfile");
             aiEnabled = p.profile.ai_enabled ?? false;
+            lastDiagDate = p.profile.last_diagnostic_date ?? null;
         } catch {
             aiEnabled = false;
         }
@@ -55,7 +68,10 @@ blocks are complete, so the highest-value work always comes first.
         <div class="mcat-card">Loading…</div>
     {:else if !unlocked}
         <div class="locked">
-            <div class="lock-badge"><Icon name="lock" size={128} /></div>
+            <div class="lock-badge">
+                <span class="seal"></span>
+                <Icon name="lock" size={128} />
+            </div>
             <h2>Finish Today's Path To Unlock</h2>
             <p class="mcat-muted">Extra Practice opens once today's path is done.</p>
             <button
@@ -64,6 +80,7 @@ blocks are complete, so the highest-value work always comes first.
             >
                 Go To Today's Path
             </button>
+            <DailyDiagnostic available={diagAvailable} />
         </div>
     {:else}
         <button class="mini-card" on:click={() => goto("/mcat/mini")}>
@@ -73,10 +90,10 @@ blocks are complete, so the highest-value work always comes first.
         </button>
 
         <section class="grid">
-            {#each SECTIONS as code (code)}
+            {#each SECTIONS as code, i (code)}
                 <div
                     class="card"
-                    style={`--c:${SECTION_COLOR[code]};--t:${textColor(SECTION_COLOR[code])}`}
+                    style={`--c:${SECTION_COLOR[code]};--t:${textColor(SECTION_COLOR[code])};--i:${i}`}
                 >
                     <div class="card-name">{SECTION_NAMES[code] ?? code}</div>
                     <div class="card-actions">
@@ -104,6 +121,8 @@ blocks are complete, so the highest-value work always comes first.
                 </div>
             {/each}
         </section>
+
+        <DailyDiagnostic available={diagAvailable} />
     {/if}
 </div>
 
@@ -129,6 +148,7 @@ blocks are complete, so the highest-value work always comes first.
         margin: 0 auto;
     }
     .lock-badge {
+        position: relative;
         width: 200px;
         height: 200px;
         border-radius: 50%;
@@ -139,10 +159,103 @@ blocks are complete, so the highest-value work always comes first.
         background: color-mix(in srgb, var(--mcat-accent) 10%, var(--mcat-surface));
         border: 2px solid color-mix(in srgb, var(--mcat-accent) 22%, var(--mcat-border));
         margin-bottom: 6px;
+        /* Drops in and clicks shut, then a periodic "locked" tug. */
+        animation:
+            lockdrop 0.7s cubic-bezier(0.2, 1.05, 0.35, 1) both,
+            lockjiggle 3.4s ease-in-out 1.2s infinite;
+    }
+    .seal {
+        position: absolute;
+        inset: -8px;
+        border-radius: 50%;
+        border: 2px solid color-mix(in srgb, var(--mcat-accent) 45%, transparent);
+        pointer-events: none;
+        animation: seal 2.6s ease-out infinite;
+    }
+    @keyframes lockdrop {
+        0% {
+            opacity: 0;
+            transform: translateY(-38px) scale(0.7);
+        }
+        62% {
+            opacity: 1;
+            transform: translateY(5px) scale(1.04);
+        }
+        100% {
+            transform: translateY(0) scale(1);
+        }
+    }
+    @keyframes lockjiggle {
+        0%,
+        88%,
+        100% {
+            transform: rotate(0);
+        }
+        90% {
+            transform: rotate(-5deg);
+        }
+        93% {
+            transform: rotate(5deg);
+        }
+        96% {
+            transform: rotate(-3deg);
+        }
+        98% {
+            transform: rotate(2deg);
+        }
+    }
+    @keyframes seal {
+        0% {
+            transform: scale(0.9);
+            opacity: 0.8;
+        }
+        70% {
+            opacity: 0;
+        }
+        100% {
+            transform: scale(1.28);
+            opacity: 0;
+        }
     }
     .locked h2 {
         margin: 0;
         font-size: 30px;
+    }
+    /* Text + button rise in under the lock. */
+    .locked h2,
+    .locked p,
+    .locked .big {
+        animation: rise 0.5s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+    }
+    .locked h2 {
+        animation-delay: 0.5s;
+    }
+    .locked p {
+        animation-delay: 0.58s;
+    }
+    .locked .big {
+        animation-delay: 0.66s;
+    }
+    @keyframes rise {
+        from {
+            opacity: 0;
+            transform: translateY(12px);
+        }
+        to {
+            opacity: 1;
+            transform: none;
+        }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .lock-badge,
+        .seal,
+        .locked h2,
+        .locked p,
+        .locked .big,
+        .mini-card,
+        .grid .card {
+            animation: none;
+        }
     }
     .big {
         padding: 14px 22px;
@@ -163,6 +276,8 @@ blocks are complete, so the highest-value work always comes first.
         transition:
             transform 0.1s ease,
             box-shadow 0.12s ease;
+        animation: rise 0.5s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+        animation-delay: 0.05s;
     }
     .mini-card:hover {
         background: linear-gradient(135deg, #5b54ea, #3b82f6);
@@ -211,6 +326,8 @@ blocks are complete, so the highest-value work always comes first.
         box-shadow:
             inset 0 1px 0 rgba(255, 255, 255, 0.16),
             0 12px 26px -12px color-mix(in srgb, var(--c) 60%, transparent);
+        animation: rise 0.5s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+        animation-delay: calc(var(--i, 0) * 70ms + 0.12s);
     }
     .card-name {
         font-weight: 800;

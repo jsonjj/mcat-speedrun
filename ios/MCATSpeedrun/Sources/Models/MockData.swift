@@ -74,7 +74,7 @@ enum MockData {
                 activity: .sectionPractice, sub: "Section Practice",
                 destination: .questions(
                     QuizConfig(title: "Mini-MCAT", sections: SectionCode.allCases,
-                               count: miniCount, seconds: 90)))
+                               count: miniCount, seconds: 120)))
         }
         func full() -> Template {
             Template(
@@ -82,7 +82,7 @@ enum MockData {
                 activity: .sectionPractice, sub: "All sections",
                 destination: .questions(
                     QuizConfig(title: "Full-Length", sections: SectionCode.allCases,
-                               count: 16, seconds: 90)))
+                               count: 16, seconds: 120)))
         }
         func maintenance() -> Template {
             Template(
@@ -92,11 +92,16 @@ enum MockData {
         }
         func application(_ s: SectionCode) -> Template {
             let label = s == .cars ? "CARS Practice" : "\(short(s)) Application"
+            // CARS uses the Author Duel destination; the view routes it to the AI
+            // debate when AI is on, or MCQ practice when off (mirrors desktop).
+            let destination: StudyDestination =
+                s == .cars
+                ? .cars
+                : .questions(QuizConfig(title: label, sections: [s], count: 10, seconds: 120))
             return Template(
                 keyBase: "\(s.rawValue)-application", label: label, minutes: 15,
                 activity: .performanceSet, sub: short(s),
-                destination: .questions(
-                    QuizConfig(title: label, sections: [s], count: 10, seconds: 90)))
+                destination: destination)
         }
         func recall(_ s: SectionCode) -> Template {
             Template(

@@ -145,9 +145,9 @@ and see your streak plus the three scores.
                 <div>
                     <h2>AI features</h2>
                     <p class="mcat-muted note">
-                        Personalized reasoning feedback, CARS debate, and a study
-                        coach. Turn off for classic mode — everything still works and
-                        still scores, with no AI calls.
+                        Personalized reasoning feedback, CARS debate, and a study coach.
+                        Turn off for classic mode — everything still works and still
+                        scores, with no AI calls.
                     </p>
                 </div>
                 <Switch
@@ -302,6 +302,49 @@ and see your streak plus the three scores.
     @media (max-width: 820px) {
         .scores {
             grid-template-columns: 1fr;
+        }
+    }
+
+    /* Cards slide in from the side, staggered, on load. */
+    .top,
+    .settings,
+    .ai-card,
+    .scores-heading,
+    .scores {
+        animation: acct-slide 0.5s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+    }
+    .top {
+        animation-delay: 0.05s;
+    }
+    .settings {
+        animation-delay: 0.12s;
+    }
+    .ai-card {
+        animation-delay: 0.19s;
+    }
+    .scores-heading {
+        animation-delay: 0.26s;
+    }
+    .scores {
+        animation-delay: 0.33s;
+    }
+    @keyframes acct-slide {
+        from {
+            opacity: 0;
+            transform: translateX(-22px);
+        }
+        to {
+            opacity: 1;
+            transform: none;
+        }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .top,
+        .settings,
+        .ai-card,
+        .scores-heading,
+        .scores {
+            animation: none;
         }
     }
 </style>

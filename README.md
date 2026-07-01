@@ -30,7 +30,13 @@ of Anki are BSD-3-Clause. Credit to the Anki project.
   Installer wheels: `just wheels` (verified installable in a clean venv).
 - **iOS:** `bash ios/build-ffi.sh` (builds the shared engine into an
   xcframework), then `bash ios/run-sim.sh` (builds + launches on the Simulator).
-- **AI eval:** `OPENAI_API_KEY=… PYTHONPATH="pylib:out/pylib" out/pyenv/bin/python tools/mcat/eval_reasoning.py`.
+- **AI:** on by default, same three features on desktop + iOS (reasoning
+  feedback, CARS debate, study coach), each grounded in a named source. The key
+  is read from `OPENAI_API_KEY` or a gitignored file (desktop
+  `pylib/anki/mcat/.openai_key`, iOS `ios/MCATSpeedrun/Resources/openai_key.txt`).
+- **AI evals** (held-out, each beats a baseline; key from env or the file):
+  `PYTHONPATH="pylib:out/pylib" out/pyenv/bin/python tools/mcat/eval_reasoning.py`
+  (and `eval_coach.py`, `eval_cars.py`). See `docs/mcat-ai-note.md`.
 - **Give-up rule:** Readiness shows no number unless all four sections have ≥40%
   coverage and ≥2 performance sets, plus ≥100 graded reviews and ≥40 performance
   attempts overall; otherwise it abstains (a broad diagnostic unlocks a labeled

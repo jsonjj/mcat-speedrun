@@ -214,22 +214,47 @@ def coach_recommendation(
             "coverage_pct": s.get("coverage_pct"),
             "memory": s["memory"].get("point"),
             "performance": s["performance"].get("point"),
-            "readiness": None if s["readiness"].get("abstained") else s["readiness"].get("point"),
+            "readiness": None
+            if s["readiness"].get("abstained")
+            else s["readiness"].get("point"),
         }
+    # Pacing signal: share of recent questions answered past the time limit, so
+    # the coach can factor in speed (the timer flags long questions, never skips).
+    recent = store.get_attempts(col)[-80:]
+    slow = sum(1 for a in recent if a.get("over_time"))
+    pacing_slow_pct = round(100 * slow / len(recent)) if recent else 0
     facts = {
         "memory": scores["memory"].get("point"),
         "performance": scores["performance"].get("point"),
-        "readiness": None if scores["readiness"].get("abstained") else scores["readiness"].get("point"),
+        "readiness": None
+        if scores["readiness"].get("abstained")
+        else scores["readiness"].get("point"),
+        "pacing_slow_pct": pacing_slow_pct,
         "sections": sections,
     }
     system = (
-        "You are an MCAT study coach. Given the student's measured scores, decide "
-        "the single most useful next action. Prefer prerequisite flashcards when "
-        "memory is weak or coverage is low; prefer performance practice in a named "
-        "section when memory is fine but applied accuracy lags. Respond as JSON "
-        "with keys: focus (one of 'memory','performance','coverage','balanced'), "
-        "section (a section code 'bb','cp','ps','cars' or ''), headline (<=8 words), "
-        "detail (2 sentences, specific and actionable)."
+        "You are an MCAT study coach. From the student's measured scores, pick the "
+        "single most useful next action. Numbers: memory and performance are "
+        "percents (0-100); coverage_pct is 0-1; readiness is a section/total score "
+        "or null when not yet estimated. Apply these rules IN ORDER and stop at the "
+        "first that fits:\n"
+        "1) If coverage is thin (most sections' coverage_pct below ~0.40) while "
+        "recall and accuracy are otherwise okay, focus='coverage'.\n"
+        "2) If OVERALL memory recall is weak (below ~70) or not yet measured "
+        "(null), focus='memory'. CARS has no flashcards, so its null memory is "
+        "normal — judge memory by the overall number and the science sections.\n"
+        "3) If memory is solid but one section's performance clearly lags the "
+        "others, focus='performance' and set section to that section's code.\n"
+        "4) If overall recall, accuracy and coverage are all strong (e.g. memory "
+        ">= ~80 and performance >= ~75 with healthy coverage), focus='balanced'.\n"
+        "Also consider pacing: pacing_slow_pct is the share of recent questions "
+        "answered past the time limit; when it's high (above ~30), work a brief "
+        "note to practice under time pressure into the detail, whatever the focus.\n"
+        "Prefer prerequisite flashcards for memory/coverage; targeted question sets "
+        "for performance. Respond as JSON with keys: focus (one of "
+        "'memory','performance','coverage','balanced'), section (a section code "
+        "'bb','cp','ps','cars' or ''), headline (<=8 words), detail (2 sentences, "
+        "specific and actionable)."
     )
     user = "STUDENT SCORES (your source):\n" + json.dumps(facts, indent=1)
     out = _chat_json(col, system=system, user=user)

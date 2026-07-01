@@ -32,13 +32,13 @@ struct AccountView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                header
-                identityCard
-                streakCard
-                studySettingsCard
-                aiCard
-                scoresSection
-                footer
+                header.slideEnter(delay: 0.03, x: -36)
+                identityCard.slideEnter(delay: 0.09, x: 36)
+                streakCard.slideEnter(delay: 0.15, x: -36)
+                studySettingsCard.slideEnter(delay: 0.21, x: 36)
+                aiCard.slideEnter(delay: 0.27, x: -36)
+                scoresSection.slideEnter(delay: 0.33, x: 36)
+                footer.screenEnter(delay: 0.4)
             }
             .padding(16)
         }

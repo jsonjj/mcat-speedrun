@@ -36,8 +36,29 @@ from anki.mcat import ai
 _GOLD = Path(__file__).with_name("eval_data") / "reasoning_gold.json"
 _LABELS = ("sound", "partially_sound", "flawed")
 _STOP = {
-    "the", "a", "an", "is", "are", "to", "of", "and", "or", "so", "it", "in",
-    "on", "that", "this", "for", "with", "as", "be", "i", "we", "they", "which",
+    "the",
+    "a",
+    "an",
+    "is",
+    "are",
+    "to",
+    "of",
+    "and",
+    "or",
+    "so",
+    "it",
+    "in",
+    "on",
+    "that",
+    "this",
+    "for",
+    "with",
+    "as",
+    "be",
+    "i",
+    "we",
+    "they",
+    "which",
 }
 
 
@@ -141,11 +162,17 @@ def run() -> int:
     beats_baseline = ai_acc > base_acc
     passed = ai_acc >= min_acc and ai_miss <= max_miss and beats_baseline
 
-    print(f"Cutoff: accuracy >= {min_acc:.0%} AND flawed-missed <= {max_miss:.0%} "
-          f"AND beats baseline")
-    print(f"AI accuracy {ai_acc:.0%} vs baseline {base_acc:.0%}  "
-          f"-> beats baseline: {beats_baseline}")
-    print(f"RESULT: {'PASS — grader is safe to ship' if passed else 'FAIL — do not ship AI grading'}")
+    print(
+        f"Cutoff: accuracy >= {min_acc:.0%} AND flawed-missed <= {max_miss:.0%} "
+        f"AND beats baseline"
+    )
+    print(
+        f"AI accuracy {ai_acc:.0%} vs baseline {base_acc:.0%}  "
+        f"-> beats baseline: {beats_baseline}"
+    )
+    print(
+        f"RESULT: {'PASS — grader is safe to ship' if passed else 'FAIL — do not ship AI grading'}"
+    )
     print("=" * 60)
     return 0 if passed else 1
 

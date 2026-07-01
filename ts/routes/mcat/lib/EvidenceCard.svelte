@@ -8,6 +8,8 @@ matching score detail page.
 -->
 <script lang="ts">
     import { goto } from "$app/navigation";
+    import { cubicOut } from "svelte/easing";
+    import { tweened } from "svelte/motion";
 
     import { evidence, toneVar } from "./blocks";
     import Icon from "./Icon.svelte";
@@ -37,7 +39,13 @@ matching score detail page.
         return b.point !== null ? `${Math.round(b.point)}` : "—";
     }
 
-    $: value = valueText(block);
+    // Count the headline percent up on mount (and re-animate on change).
+    const shownPct = tweened(0, { duration: 850, easing: cubicOut });
+    $: isPct =
+        !block.abstained &&
+        (block.unit === "percent_recall" || block.unit === "percent_correct");
+    $: shownPct.set(isPct ? (block.point ?? 0) : 0);
+    $: value = isPct ? `${Math.round($shownPct)}%` : valueText(block);
     $: barLow = block.abstained ? scaleMin : (block.low ?? scaleMin);
     $: barHigh = block.abstained ? scaleMin : (block.high ?? scaleMin);
     $: barPoint = block.abstained ? scaleMin : (block.point ?? scaleMin);

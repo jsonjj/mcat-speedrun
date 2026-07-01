@@ -57,6 +57,12 @@ final class SyncManager: ObservableObject {
             if let dk = data["diagnosticKind"] as? String {
                 app.diagnosticKind = dk.isEmpty ? nil : dk
             }
+            if let ldd = data["lastDiagnosticDate"] as? String {
+                // Keep the later date so a device that hasn't caught up can't undo
+                // "done today" (ISO date strings compare lexically).
+                let best = max(ldd, app.lastDiagnosticDate ?? "")
+                app.lastDiagnosticDate = best.isEmpty ? nil : best
+            }
             if let ai = data["aiEnabled"] as? Bool {
                 app.aiEnabled = ai
             }
@@ -107,6 +113,7 @@ final class SyncManager: ObservableObject {
         ]
         if let ed = app.examDate { data["examDate"] = AppState.dayString(ed) }
         data["aiEnabled"] = app.aiEnabled
+        data["lastDiagnosticDate"] = app.lastDiagnosticDate ?? ""
         data["devMastery"] = app.devMastery ?? FieldValue.delete()
         if let progress {
             data["mcatLogIos"] = progress.stateJSON

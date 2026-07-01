@@ -8,9 +8,17 @@
 import SwiftUI
 
 struct DiagnosticView: View {
+    /// When set (daily diagnostic from Extra Practice), skip the picker and start
+    /// this length immediately.
+    let presetKind: String?
     @State private var started = false
-    @State private var kind = "standard"
+    @State private var kind: String
     @State private var items: [Question] = []
+
+    init(presetKind: String? = nil) {
+        self.presetKind = presetKind
+        _kind = State(initialValue: presetKind ?? "standard")
+    }
 
     private let options: [(kind: String, title: String, sub: String, per: Int)] = [
         ("quick", "Quick", "3 per section · 12 questions", 3),
@@ -24,13 +32,24 @@ struct DiagnosticView: View {
                 QuestionRunnerView(
                     config: QuizConfig(
                         title: "Diagnostic", sections: SectionCode.allCases,
-                        count: items.count, seconds: nil),
+                        count: items.count, seconds: 120),
                     items: items, diagnosticKind: kind)
             } else {
                 picker
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            if let presetKind, !started {
+                kind = presetKind
+                items = buildItems(perFor(presetKind))
+                started = true
+            }
+        }
+    }
+
+    private func perFor(_ kind: String) -> Int {
+        options.first { $0.kind == kind }?.per ?? 5
     }
 
     private var picker: some View {
@@ -39,8 +58,9 @@ struct DiagnosticView: View {
                 ScreenHeader(
                     "Placement Diagnostic",
                     "Answer a balanced mix across all four sections to seed your scores.")
+                    .screenEnter()
 
-                ForEach(options, id: \.kind) { opt in
+                ForEach(Array(options.enumerated()), id: \.element.kind) { i, opt in
                     Button { kind = opt.kind } label: {
                         HStack(spacing: 12) {
                             VStack(alignment: .leading, spacing: 4) {
@@ -63,6 +83,7 @@ struct DiagnosticView: View {
                     }
                     .buttonStyle(.plain)
                     .tapSound()
+                    .screenEnter(delay: 0.05 + Double(i) * 0.06)
                 }
 
                 Button("Start diagnostic") {
@@ -71,6 +92,7 @@ struct DiagnosticView: View {
                     started = true
                 }
                 .buttonStyle(PrimaryButtonStyle())
+                .screenEnter(delay: 0.28)
             }
             .padding(16)
             .frame(maxWidth: .infinity)

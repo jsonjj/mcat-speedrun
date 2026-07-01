@@ -7,8 +7,9 @@
 // Rounded, friendly type to match the mockups. "Nunito Variable" is bundled
 // (via @fontsource-variable/nunito) so the look is identical everywhere,
 // including QtWebEngine where ui-rounded does not resolve to SF Pro Rounded.
-$mcat-font: "Nunito Variable", "Nunito", ui-rounded, "SF Pro Rounded", "Segoe UI",
-    system-ui, sans-serif;
+$mcat-font:
+    "Nunito Variable", "Nunito", ui-rounded, "SF Pro Rounded", "Segoe UI", system-ui,
+    sans-serif;
 
 :root {
     --mcat-bg: #f3f4f9;
@@ -75,7 +76,9 @@ body {
     -webkit-font-smoothing: antialiased;
     font-size: 16px;
     line-height: 1.5;
-    transition: background 0.2s ease, color 0.2s ease;
+    transition:
+        background 0.2s ease,
+        color 0.2s ease;
 }
 
 // Form controls don't inherit font-family by default; force the rounded font.
@@ -98,6 +101,25 @@ body {
     max-width: 1320px;
     margin: 0 auto;
     padding: 22px 30px 40px;
+    /* Every page eases in on mount (SvelteKit remounts the page per route). The
+       final frame is `transform: none` so no lingering transform is left to
+       create a containing block for fixed descendants (e.g. the dev modal). */
+    animation: mcat-page-in 0.4s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+@keyframes mcat-page-in {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .mcat-container {
+        animation: none;
+    }
 }
 
 .mcat-header {
@@ -155,7 +177,10 @@ body {
     font-size: 15px;
     font-weight: 600;
     cursor: pointer;
-    transition: transform 0.08s ease, box-shadow 0.12s ease, background 0.12s ease;
+    transition:
+        transform 0.08s ease,
+        box-shadow 0.12s ease,
+        background 0.12s ease;
 }
 
 .mcat-app .mcat-btn:hover {

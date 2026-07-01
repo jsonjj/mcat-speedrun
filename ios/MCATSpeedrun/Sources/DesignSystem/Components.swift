@@ -80,6 +80,53 @@ extension View {
     }
 }
 
+// MARK: - Entrance animations
+
+/// Fades + rises a view in on appear (optionally staggered). Gives every screen
+/// a gentle, consistent entrance.
+struct ScreenEnter: ViewModifier {
+    var delay: Double = 0
+    var y: CGFloat = 14
+    @State private var shown = false
+    func body(content: Content) -> some View {
+        content
+            .opacity(shown ? 1 : 0)
+            .offset(y: shown ? 0 : y)
+            .onAppear {
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.9).delay(delay)) {
+                    shown = true
+                }
+            }
+    }
+}
+
+/// Slides a view in horizontally with a slight rise — the Account cards' "cool
+/// slide" entrance.
+struct SlideEnter: ViewModifier {
+    var delay: Double = 0
+    var x: CGFloat = -40
+    @State private var shown = false
+    func body(content: Content) -> some View {
+        content
+            .opacity(shown ? 1 : 0)
+            .offset(x: shown ? 0 : x, y: shown ? 0 : 8)
+            .onAppear {
+                withAnimation(.spring(response: 0.55, dampingFraction: 0.85).delay(delay)) {
+                    shown = true
+                }
+            }
+    }
+}
+
+extension View {
+    func screenEnter(delay: Double = 0, y: CGFloat = 14) -> some View {
+        modifier(ScreenEnter(delay: delay, y: y))
+    }
+    func slideEnter(delay: Double = 0, x: CGFloat = -40) -> some View {
+        modifier(SlideEnter(delay: delay, x: x))
+    }
+}
+
 /// Small labelled toggle chip used for the Dark Mode / Sound switches.
 struct ToggleChip: View {
     var icon: String
@@ -102,6 +149,7 @@ struct ToggleChip: View {
 // MARK: - Range bar
 
 /// A value range on a fixed scale: a track, a tinted low–high band, and a tick.
+/// On appear the band grows outward from the point and the tick pops in.
 struct RangeBarView: View {
     var lo: Double
     var hi: Double
@@ -110,21 +158,36 @@ struct RangeBarView: View {
     var point: Double
     var color: Color
 
+    @State private var grow: CGFloat = 0
+    @State private var tickIn = false
+
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width
             let span = Swift.max(hi - lo, 0.0001)
             let px = { (v: Double) in CGFloat((v - lo) / span) * w }
+            let pointX = px(point)
+            // Band expands from the point out to [low, high] as `grow` 0 -> 1.
+            let leftEdge = pointX - (pointX - px(low)) * grow
+            let rightEdge = pointX + (px(high) - pointX) * grow
             ZStack(alignment: .leading) {
                 Capsule().fill(Theme.track).frame(height: 6)
                 Capsule().fill(color.opacity(0.55))
-                    .frame(width: Swift.max(px(high) - px(low), 6), height: 6)
-                    .offset(x: px(low))
+                    .frame(width: Swift.max(rightEdge - leftEdge, 6), height: 6)
+                    .offset(x: leftEdge)
                 RoundedRectangle(cornerRadius: 2).fill(color)
                     .frame(width: 3, height: 15)
-                    .offset(x: px(point) - 1.5)
+                    .scaleEffect(y: tickIn ? 1 : 0.3)
+                    .opacity(tickIn ? 1 : 0)
+                    .offset(x: pointX - 1.5)
             }
             .frame(height: 15)
+            .onAppear {
+                withAnimation(.spring(response: 0.6, dampingFraction: 0.85)) { grow = 1 }
+                withAnimation(
+                    .spring(response: 0.45, dampingFraction: 0.6).delay(0.25)
+                ) { tickIn = true }
+            }
         }
         .frame(height: 15)
     }
@@ -145,8 +208,14 @@ struct EvidenceCardView: View {
                 Image(systemName: icon).foregroundStyle(block.tone.color)
                 Text(title).font(Theme.font(16, .bold)).foregroundStyle(Theme.text)
                 Spacer()
-                Text(block.display).font(Theme.font(22, .heavy))
-                    .foregroundStyle(block.tone.color)
+                if block.isPercent, !block.abstained, let p = block.point {
+                    CountUpText(
+                        value: p, suffix: "%", font: Theme.font(22, .heavy),
+                        color: block.tone.color)
+                } else {
+                    Text(block.display).font(Theme.font(22, .heavy))
+                        .foregroundStyle(block.tone.color)
+                }
             }
             RangeBarView(
                 lo: scaleMin, hi: scaleMax,
@@ -169,19 +238,76 @@ struct DaysRingView: View {
     var days: Int
     var progress: Double = 0.72
 
+    @State private var trim: Double = 0
+
     var body: some View {
         ZStack {
             Circle().stroke(Theme.track, lineWidth: 8)
-            Circle().trim(from: 0, to: progress)
+            Circle().trim(from: 0, to: trim)
                 .stroke(Theme.accent, style: StrokeStyle(lineWidth: 8, lineCap: .round))
                 .rotationEffect(.degrees(-90))
             VStack(spacing: 0) {
-                Text("\(days)").font(Theme.font(30, .heavy)).foregroundStyle(Theme.text)
+                CountUpText(
+                    value: Double(days), font: Theme.font(30, .heavy), color: Theme.text)
                 Text("Days To Go").font(Theme.font(10, .semibold))
                     .foregroundStyle(Theme.muted)
             }
         }
         .frame(width: 128, height: 128)
+        .onAppear {
+            withAnimation(.easeOut(duration: 0.95)) { trim = progress }
+        }
+        .onChange(of: progress) { _, new in
+            withAnimation(.easeOut(duration: 0.6)) { trim = new }
+        }
+    }
+}
+
+// MARK: - Count-up number
+
+/// A number that counts up from 0 on appear (and re-animates when it changes).
+/// Used for score percentages and the days-to-go ring.
+struct CountUpText: View {
+    var value: Double
+    var suffix: String = ""
+    var font: Font
+    var color: Color
+    var duration: Double = 0.9
+
+    @State private var shown: Double = 0
+
+    var body: some View {
+        Text(verbatim: " ")
+            .modifier(
+                CountingText(number: shown, suffix: suffix, font: font, color: color)
+            )
+            .onAppear {
+                shown = 0
+                withAnimation(.easeOut(duration: duration)) { shown = value }
+            }
+            .onChange(of: value) { _, v in
+                withAnimation(.easeOut(duration: duration)) { shown = v }
+            }
+    }
+}
+
+/// Animatable modifier that interpolates a Double and renders it as rounded text.
+private struct CountingText: AnimatableModifier {
+    var number: Double
+    var suffix: String
+    var font: Font
+    var color: Color
+
+    var animatableData: Double {
+        get { number }
+        set { number = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        Text("\(Int(number.rounded()))\(suffix)")
+            .font(font)
+            .foregroundStyle(color)
+            .monospacedDigit()
     }
 }
 

@@ -76,6 +76,10 @@ def get_profile(col: anki.collection.Collection) -> dict[str, Any]:
         "onboarding_done": False,
         "diagnostic_done": False,
         "diagnostic_kind": None,  # quick | standard | best_estimate
+        # Date ("YYYY-MM-DD") of the most recent diagnostic (initial or daily).
+        # A daily diagnostic is available once the stored date isn't today; synced
+        # across devices so one diagnostic per day counts for both apps.
+        "last_diagnostic_date": None,
         "logged_in": True,  # local session flag; logout sets this false
         "is_dev": False,  # dev-mode tools (roadmap "mark done")
         "ai_enabled": True,  # AI features on by default; off = the no-AI build
@@ -118,6 +122,7 @@ def new_attempt(
     confidence: str,
     first_time_ms: int,
     batch_id: str | None = None,
+    over_time: bool = False,
 ) -> dict[str, Any]:
     """Build a first-pass attempt record. Second-pass fields filled in later."""
     return {
@@ -137,6 +142,8 @@ def new_attempt(
         "first_correct": first_correct,
         "confidence": confidence,
         "first_time_ms": first_time_ms,
+        # whether the student ran past the per-question time limit (pacing signal)
+        "over_time": over_time,
         # second pass (delayed batch feedback -> revise)
         "second_choice": None,
         "second_correct": None,

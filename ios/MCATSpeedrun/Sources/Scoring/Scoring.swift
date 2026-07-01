@@ -29,6 +29,79 @@ enum Scoring {
         return emptyModel(days: days, streak: app.streak)
     }
 
+    // MARK: - Coach facts (compact scores summary for the AI coach)
+
+    /// The compact JSON the AI coach is grounded in — overall and per-section
+    /// memory/performance/readiness points + coverage — from the shared engine's
+    /// scores. Matches the desktop coach's `facts`. Returns "{}" if unavailable.
+    static func coachFactsJSON(app: AppState, progress: ProgressStore) -> String {
+        guard let full = fullScores(app: app, progress: progress) else { return "{}" }
+
+        func point(_ b: FullBlock) -> Any {
+            b.abstained ? NSNull() : (b.point.map { $0 as Any } ?? NSNull())
+        }
+
+        var sectionFacts: [String: Any] = [:]
+        for (code, s) in full.sections {
+            sectionFacts[code] = [
+                "coverage_pct": s.coveragePct,
+                "memory": point(s.memory),
+                "performance": point(s.performance),
+                "readiness": point(s.readiness),
+            ]
+        }
+        let facts: [String: Any] = [
+            "memory": point(full.memory),
+            "performance": point(full.performance),
+            "readiness": point(full.readiness),
+            "pacing_slow_pct": progress.pacingSlowPct,
+            "sections": sectionFacts,
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: facts),
+            let str = String(data: data, encoding: .utf8)
+        else { return "{}" }
+        return str
+    }
+
+    /// True when there's at least some measured evidence to coach on (avoids a
+    /// wasted API call + a generic tip on a brand-new account).
+    static func hasEvidence(app: AppState, progress: ProgressStore) -> Bool {
+        guard let full = fullScores(app: app, progress: progress) else { return false }
+        return !(full.memory.abstained && full.performance.abstained && full.readiness.abstained)
+    }
+
+    private static func fullScores(app: AppState, progress: ProgressStore) -> FullScores? {
+        let json = Engine.scores(
+            state: progress.combinedLogJSON(),
+            coverage: ContentStore.shared.coverageJSON(),
+            external: "{}",
+            diag: app.diagnosticKind ?? "")
+        return decodeFull(json)
+    }
+
+    private struct FullBlock: Decodable {
+        var abstained: Bool
+        var point: Double?
+    }
+    private struct FullSection: Decodable {
+        var coveragePct: Double
+        var memory: FullBlock
+        var performance: FullBlock
+        var readiness: FullBlock
+    }
+    private struct FullScores: Decodable {
+        var memory: FullBlock
+        var performance: FullBlock
+        var readiness: FullBlock
+        var sections: [String: FullSection]
+    }
+    private static func decodeFull(_ json: String) -> FullScores? {
+        guard let data = json.data(using: .utf8) else { return nil }
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return try? decoder.decode(FullScores.self, from: data)
+    }
+
     // MARK: - Engine result -> view model
 
     private static func mapEngine(_ s: EngineScores, days: Int, streak: Int)
