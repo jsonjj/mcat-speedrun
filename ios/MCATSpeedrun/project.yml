@@ -1,0 +1,54 @@
+name: MCATSpeedrun
+options:
+  bundleIdPrefix: com.mcatspeedrun
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+packages:
+  Firebase:
+    url: https://github.com/firebase/firebase-ios-sdk
+    from: "11.0.0"
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    from: "8.0.0"
+targets:
+  MCATSpeedrun:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: GoogleService-Info.plist
+      - path: Resources
+    info:
+      path: Info.plist
+      properties:
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        CFBundleURLTypes:
+          - CFBundleURLSchemes:
+              - com.googleusercontent.apps.734227360158-qnve29v60tobai76n139mp7314lkkic2
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mcatspeedrun.app
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1"
+        # Baked-in personal team so signed builds work from Xcode AND the CLI,
+        # and survive project regeneration. Firebase Auth's keychain needs this.
+        DEVELOPMENT_TEAM: A8GPVV82ZU
+        CODE_SIGN_STYLE: Automatic
+    # No explicit keychain-access-groups: when signed with a team (even a free
+    # personal team), the app's default keychain group (its application-identifier)
+    # is valid, which is all Firebase Auth needs — and this avoids the extra
+    # provisioning a Keychain Sharing capability requires on free accounts.
+    dependencies:
+      - framework: mcat_ffi.xcframework
+        embed: false
+      - package: Firebase
+        product: FirebaseAuth
+      - package: Firebase
+        product: FirebaseFirestore
+      - package: GoogleSignIn
+        product: GoogleSignIn

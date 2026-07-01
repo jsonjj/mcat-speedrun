@@ -1,0 +1,10 @@
+# Rust build output
+mcat-ffi/target/
+
+# Generated Xcode project(s) + packaged engine (xcodegen regenerates these;
+# the wildcard also covers iCloud "MCATSpeedrun 2.xcodeproj" style duplicates)
+MCATSpeedrun/*.xcodeproj/
+MCATSpeedrun/mcat_ffi.xcframework/
+build/
+DerivedData/
+*.xcuserstate

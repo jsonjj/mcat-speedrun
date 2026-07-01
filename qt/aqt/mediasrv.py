@@ -422,6 +422,7 @@ def is_sveltekit_page(path: str) -> bool:
         "import-csv",
         "import-page",
         "image-occlusion",
+        "mcat",
     ]
 
 
@@ -722,6 +723,11 @@ post_handler_list = [
     save_custom_colours,
 ]
 
+# MCAT Speedrun page handlers (reached at /_anki/<camelCaseName>).
+from aqt.mcat.endpoints import MCAT_POST_HANDLERS
+
+post_handler_list += MCAT_POST_HANDLERS
+
 
 exposed_backend_list = [
     # CollectionService
@@ -765,6 +771,8 @@ exposed_backend_list = [
     # DeckConfigService
     "get_ignored_before_count",
     "get_retention_workload",
+    # MasteryService (MCAT Speedrun)
+    "get_topic_mastery",
 ]
 
 

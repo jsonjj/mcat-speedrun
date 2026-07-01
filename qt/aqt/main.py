@@ -1465,6 +1465,11 @@ title="{}" {}>{}</button>""".format(
         )
         m.actionFullScreen.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
 
+        # MCAT Speedrun menu + toolbar link
+        from aqt.mcat.screens import setup_mcat
+
+        setup_mcat(self)
+
     def updateTitleBar(self) -> None:
         self.setWindowTitle("Anki")
 

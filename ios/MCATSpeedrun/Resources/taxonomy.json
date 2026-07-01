@@ -1,0 +1,52 @@
+{
+    "version": 1,
+    "note": "Scaffold MCAT topic taxonomy. Topic ids and weights are placeholders to be replaced with the official AAMC content outline. Weights are relative section importance hints (higher = more heavily tested).",
+    "sections": {
+        "bb": {
+            "name": "Biological and Biochemical Foundations of Living Systems",
+            "topics": [
+                { "id": "bb.amino_acids", "name": "Amino acids and proteins", "weight": 4.0 },
+                { "id": "bb.enzymes", "name": "Enzymes and kinetics", "weight": 3.5 },
+                { "id": "bb.metabolism", "name": "Metabolism and bioenergetics", "weight": 3.5 },
+                { "id": "bb.molecular_biology", "name": "Molecular biology and genetics", "weight": 3.0 },
+                { "id": "bb.cell_biology", "name": "Cell biology and membranes", "weight": 3.0 },
+                { "id": "bb.organ_systems", "name": "Organ systems and physiology", "weight": 3.0 },
+                { "id": "bb.experimental_methods", "name": "Experimental methods and lab techniques", "weight": 2.5 }
+            ]
+        },
+        "cp": {
+            "name": "Chemical and Physical Foundations of Biological Systems",
+            "topics": [
+                { "id": "cp.kinematics", "name": "Kinematics and forces", "weight": 3.0 },
+                { "id": "cp.energy_work", "name": "Energy, work and power", "weight": 3.0 },
+                { "id": "cp.fluids", "name": "Fluids and gases", "weight": 3.0 },
+                { "id": "cp.thermo", "name": "Thermodynamics", "weight": 2.5 },
+                { "id": "cp.electrochem", "name": "Electrochemistry and circuits", "weight": 2.5 },
+                { "id": "cp.acid_base", "name": "Acids, bases and equilibrium", "weight": 3.5 },
+                { "id": "cp.optics", "name": "Optics and waves", "weight": 2.0 }
+            ]
+        },
+        "ps": {
+            "name": "Psychological, Social, and Biological Foundations of Behavior",
+            "topics": [
+                { "id": "ps.learning_memory", "name": "Learning and memory", "weight": 3.5 },
+                { "id": "ps.sensation_perception", "name": "Sensation and perception", "weight": 3.0 },
+                { "id": "ps.cognition", "name": "Cognition and consciousness", "weight": 3.0 },
+                { "id": "ps.social_psych", "name": "Social psychology", "weight": 3.5 },
+                { "id": "ps.identity", "name": "Self and identity", "weight": 2.5 },
+                { "id": "ps.social_structure", "name": "Social structure and demographics", "weight": 3.0 },
+                { "id": "ps.research_methods", "name": "Research methods and statistics", "weight": 2.5 }
+            ]
+        },
+        "cars": {
+            "name": "Critical Analysis and Reasoning Skills",
+            "topics": [
+                { "id": "cars.main_idea", "name": "Main idea and author purpose", "weight": 4.0 },
+                { "id": "cars.tone_attitude", "name": "Tone and attitude", "weight": 3.0 },
+                { "id": "cars.argument_structure", "name": "Argument structure and evidence", "weight": 4.0 },
+                { "id": "cars.inference", "name": "Inference within passage boundaries", "weight": 3.5 },
+                { "id": "cars.application", "name": "Applying arguments to new cases", "weight": 3.5 }
+            ]
+        }
+    }
+}

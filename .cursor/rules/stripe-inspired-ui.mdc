@@ -1,0 +1,55 @@
+---
+description: Premium, Stripe-inspired product design direction for all MCAT Speedrun UI (Svelte pages and Qt screens)
+globs: ts/routes/**,ts/lib/**,qt/aqt/**
+alwaysApply: false
+---
+
+# MCAT Speedrun UI design direction
+
+When building, redesigning, improving, styling, or polishing any MCAT Speedrun
+screen, use a premium, confident, Stripe-inspired product design direction.
+
+Do NOT copy Stripe. Do not use Stripe logos, exact layouts, exact gradients,
+exact colors, exact copy, or anything that could be mistaken for Stripe. Use the
+broader principles only, adapted originally to this app.
+
+## Product tone
+- Calm, high-achiever, trustworthy. This is a tool for serious MCAT students.
+- Direct but never degrading. Warnings are gentle and constructive, never alarming.
+- Honesty over hype: when the app abstains from a score, the UI should make
+  abstention feel responsible and reassuring, not like a failure.
+
+## Visual language
+- Strong, deliberate visual hierarchy: one clear primary action per view.
+- Clean typography with generous spacing; let content breathe.
+- Polished cards and surfaces with soft elevation and consistent radii.
+- Beautiful gradients used with restraint, as accents only (e.g. a readiness
+  range header), never as loud full-page washes.
+- Responsive layouts that hold up from narrow Qt webviews to full windows.
+
+## Evidence-first scoring UI
+- Never show a single blended number. Memory, Performance, and Readiness are
+  always visually separated.
+- Scores are range-first. Show the range prominently, the point estimate
+  secondarily, and always attach: confidence, coverage %, last updated, main
+  evidence, missing data, and a single best next action.
+- Use clear, non-clinical labels for confidence (e.g. Low / Low-medium / Medium
+  / High) and consistent color semantics across the app.
+
+## Roadmap and flow
+- Roadmap blocks should feel satisfying to complete: clear labels, estimated
+  time, section, and mode, with a tactile sense of progress.
+- Required vs optional work should be obvious. Optional/free practice is
+  encouraged after required work, never punished.
+
+## Implementation conventions
+- Reuse existing shared components in `ts/lib/components/` and tokens in
+  `ts/lib/sass/` (color palette, root vars, night mode) before adding new ones.
+- Support light and dark mode via the existing theme system; never hardcode
+  raw colors when a token exists.
+- Keep interactions fast and never block the UI; long work shows calm progress.
+
+## Theming tokens to prefer
+- Colors via the palette in `ts/lib/sass/_color-palette.scss` and CSS custom
+  properties in `_root-vars.scss`.
+- Spacing, radius, and elevation via existing Sass helpers/mixins.

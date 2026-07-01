@@ -25,6 +25,8 @@ pub mod latex;
 pub mod links;
 pub mod log;
 mod markdown;
+pub mod mastery;
+pub mod mcat_core;
 pub mod media;
 pub mod notes;
 pub mod notetype;

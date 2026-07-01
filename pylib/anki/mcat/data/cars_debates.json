@@ -1,0 +1,79 @@
+{
+    "deck": "MCAT Speedrun",
+    "note": "Dedicated CARS Student-vs-Author debate passages. Authored original content; NOT AAMC material. strong_rebuttal/strong_defense are model answers for self-comparison (no AI grading yet); prompt_skills map each prompt to a CARS skill.",
+    "source_id": "claude-mcat-cars-debate-v1",
+    "items": [
+        {
+            "kind": "cars",
+            "section": "cars",
+            "topic_ids": ["cars.argument_structure"],
+            "difficulty": 3,
+            "source_id": "claude-mcat-cars-debate-v1",
+            "skill_type": "argument_structure",
+            "passage": "The author contends that cities should prioritize public transit over private cars, arguing that shared infrastructure produces more freedom, not less. A person without a car in a transit-rich city, they claim, can reach more destinations, more reliably, than a car owner stuck in congestion. Critics of car culture, the author insists, are not against mobility but against a narrow and costly form of it.",
+            "author_claim": "Investing in public transit expands individual freedom more than private car ownership does.",
+            "debate_prompts": [
+                "What is the author trying to make you accept?",
+                "Argue against the author: where is the argument weakest?",
+                "Now defend the author: state the strongest version of this claim.",
+                "New condition: the city is very low-density and spread out. Does the argument get stronger, weaker, or stay the same?"
+            ],
+            "prompt_skills": [
+                "Foundations of Comprehension",
+                "Reasoning Within the Text",
+                "Reasoning Within the Text",
+                "Reasoning Beyond the Text"
+            ],
+            "strong_rebuttal": "The strongest challenge targets the hidden assumption that 'destinations reachable' is the whole of freedom. Freedom also means going where transit doesn't, when it doesn't run, on your own schedule — night shifts, rural trips, hauling cargo. The author quietly conflates mobility with freedom and assumes a dense, reliable network that may not exist. Attack the conflation and the unstated premise, not transit itself.",
+            "strong_defense": "The strongest defense reframes freedom as realized, not theoretical: a car stuck in traffic, hard to park, and costly to own is a constrained freedom. In a dense, well-funded network the average person reaches more places more reliably and cheaply, and people who can't drive (age, disability, income) aren't excluded at all. The claim is strongest when freedom is measured as access across a whole population, not one driver's ideal day."
+        },
+        {
+            "kind": "cars",
+            "section": "cars",
+            "topic_ids": ["cars.main_idea"],
+            "difficulty": 3,
+            "source_id": "claude-mcat-cars-debate-v1",
+            "skill_type": "main_idea",
+            "passage": "The author argues that grading distorts learning. Once a number is attached to a piece of work, they claim, students optimize for the number rather than for understanding, and curiosity quietly dies. Teachers, too, begin to teach what is easy to measure. The author concedes that some evaluation is unavoidable, but insists that the dominance of the grade has hollowed out the very thing school exists to cultivate.",
+            "author_claim": "Grading, by making a measurable number the goal, undermines genuine learning.",
+            "debate_prompts": [
+                "What is the author trying to make you accept?",
+                "Argue against the author: what does a defender of grades say?",
+                "Now defend the author: what is the strongest version of this claim?",
+                "New condition: a study shows ungraded students learn less. Does the argument get stronger, weaker, or stay the same?"
+            ],
+            "prompt_skills": [
+                "Foundations of Comprehension",
+                "Reasoning Within the Text",
+                "Reasoning Within the Text",
+                "Reasoning Beyond the Text"
+            ],
+            "strong_rebuttal": "Challenge the causal leap. The author assumes grades cause the loss of curiosity, but grades may merely co-occur with other pressures — large classes, standardized tests, time scarcity. A defender notes grades also give feedback, signal mastery, and motivate students who would otherwise disengage. The weak point is treating 'optimize for the number' as inevitable rather than a fixable feature of how grades are used.",
+            "strong_defense": "The strongest version narrows the claim: it isn't that any evaluation harms learning, but that making the measurable number the GOAL crowds out the intrinsic aim. This is Goodhart's logic — when a measure becomes a target it stops being a good measure. Defended carefully, the claim is about incentive structure, not the mere existence of feedback, so the concession about 'some evaluation' doesn't weaken it."
+        },
+        {
+            "kind": "cars",
+            "section": "cars",
+            "topic_ids": ["cars.inference"],
+            "difficulty": 4,
+            "source_id": "claude-mcat-cars-debate-v1",
+            "skill_type": "application",
+            "passage": "The author maintains that anonymity online is, on balance, a public good. Without it, they argue, whistleblowers fall silent, dissidents are exposed, and ordinary people self-censor out of fear that any stray remark will follow them forever. The author acknowledges that anonymity also shelters cruelty, but argues that the remedy for bad speech is accountability for actions, not the unmasking of everyone in advance.",
+            "author_claim": "On balance, online anonymity protects more valuable speech than it enables harm.",
+            "debate_prompts": [
+                "What is the author trying to make you accept?",
+                "Argue against the author: where is the argument most vulnerable?",
+                "Now defend the author: state the strongest version of this claim.",
+                "New condition: most online harm is shown to come from anonymous accounts. Does the argument get stronger, weaker, or stay the same?"
+            ],
+            "prompt_skills": [
+                "Foundations of Comprehension",
+                "Reasoning Within the Text",
+                "Reasoning Within the Text",
+                "Reasoning Beyond the Text"
+            ],
+            "strong_rebuttal": "The most vulnerable move is the 'on balance' framing with no way to weigh the two sides — the author asserts a net positive without a metric. Then press the proposed remedy: 'accountability for actions, not unmasking' may be incoherent, because if you can't identify the actor you can't hold them accountable. The remedy quietly assumes the very identification the claim rejects.",
+            "strong_defense": "Defended at its strongest, the claim is comparative and institutional: the speech anonymity protects — whistleblowing, dissent, candor — is disproportionately high-value and hard to replace, while much harm has non-anonymous remedies (moderation, platform liability, narrow unmasking through due process). The point isn't that anonymity is costless; it's that pre-emptively unmasking everyone is a blunt instrument whose chilling cost outweighs its benefit."
+        }
+    ]
+}

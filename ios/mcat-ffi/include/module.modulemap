@@ -1,0 +1,4 @@
+module mcat_ffi {
+    header "mcat_ffi.h"
+    export *
+}

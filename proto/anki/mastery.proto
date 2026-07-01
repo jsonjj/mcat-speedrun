@@ -1,0 +1,113 @@
+// Copyright: Ankitects Pty Ltd and contributors
+// License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
+
+// MCAT Speedrun: the Mastery Query.
+//
+// This is MCAT Speedrun's first real Rust engine change. It aggregates
+// per-topic mastery from the collection (cards + reviews + tags) and the
+// MCAT performance attempts stored in the collection config, fast enough to
+// power the dashboard on large decks. See docs/mcat-mastery-query-note.md.
+
+syntax = "proto3";
+
+option java_multiple_files = true;
+
+package anki.mastery;
+
+service MasteryService {
+  rpc GetTopicMastery(GetTopicMasteryRequest) returns (TopicMasteryResponse);
+  // Shared MCAT engine (mcat_core): compute the three scores, replay-union merge
+  // two engine states, and list the memory cards due now (FSRS from the log).
+  // All payloads are JSON (see rslib mcat_core::api).
+  rpc McatScores(McatScoresRequest) returns (McatScoresResponse);
+  rpc McatMerge(McatMergeRequest) returns (McatMergeResponse);
+  rpc McatDueCards(McatDueCardsRequest) returns (McatDueCardsResponse);
+}
+
+// Implicitly includes any of the above methods that are not listed in the
+// backend service (auto-delegated through the collection lock).
+service BackendMasteryService {}
+
+enum CoverageStatus {
+  COVERAGE_STATUS_NONE = 0;
+  COVERAGE_STATUS_MEMORY_ONLY = 1;
+  COVERAGE_STATUS_PERFORMANCE_ONLY = 2;
+  COVERAGE_STATUS_FULL = 3;
+}
+
+message GetTopicMasteryRequest {
+  // Optional MCAT section filter ("bb", "cp", "ps", "cars"). Empty = all.
+  string section = 1;
+}
+
+message TopicMastery {
+  string topic_id = 1;
+  string section = 2;
+
+  // Content/scheduling (memory side)
+  uint32 total_cards = 3;
+  uint32 memory_cards = 4;
+  uint32 performance_cards = 5;
+  uint32 reviewed_cards = 6;
+  uint32 due_cards = 7;
+  uint32 mature_cards = 8;
+  // Sum of repetitions across this topic's memory cards (graded reviews proxy).
+  uint32 graded_reviews = 9;
+  // Mean recall proxy over reviewed memory cards, 0.0-1.0 (FSRS-ready).
+  double avg_retrievability = 10;
+
+  // Performance side (from mcat:attempts in the collection config)
+  uint32 performance_attempts = 11;
+  uint32 performance_first_correct = 12;
+
+  // Confidence calibration counts
+  uint32 calibration_certain = 13;
+  uint32 calibration_certain_correct = 14;
+  uint32 calibration_guessing = 15;
+  uint32 calibration_guessing_correct = 16;
+
+  CoverageStatus coverage = 17;
+}
+
+message TopicMasteryResponse {
+  repeated TopicMastery topics = 1;
+  uint32 total_graded_reviews = 2;
+  uint32 total_performance_attempts = 3;
+}
+
+message McatScoresRequest {
+  // McatState (event logs) JSON; "" or "{}" for an empty state.
+  string state_json = 1;
+  // {"bb":[covered,total], ...}
+  string coverage_json = 2;
+  // The other device's aggregate to fold in; "" for none.
+  string external_json = 3;
+  // Diagnostic kind ("standard"/"best_estimate"/...); "" for none.
+  string diagnostic_kind = 4;
+}
+
+message McatScoresResponse {
+  string scores_json = 1;
+}
+
+message McatMergeRequest {
+  string state_json = 1;
+  string other_json = 2;
+}
+
+message McatMergeResponse {
+  string state_json = 1;
+}
+
+message McatDueCardsRequest {
+  string state_json = 1;
+  // JSON array of all candidate card keys.
+  string all_keys_json = 2;
+  int64 now_ts = 3;
+  float retention = 4;
+}
+
+message McatDueCardsResponse {
+  // JSON array of card keys due now (never reviewed, or past due).
+  string keys_json = 1;
+}

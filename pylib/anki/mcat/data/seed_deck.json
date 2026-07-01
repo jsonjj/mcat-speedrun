@@ -1,0 +1,372 @@
+{
+    "deck": "MCAT Speedrun",
+    "note": "Authored, original scaffold content. NOT AAMC material. Replace with licensed content later via the same content-pack format.",
+    "source_id": "scaffold",
+    "items": [
+        {
+            "kind": "memory",
+            "section": "bb",
+            "topic_ids": ["bb.amino_acids"],
+            "difficulty": 2,
+            "source_id": "scaffold",
+            "front": "Which amino acid has a thiol (-SH) side chain that forms disulfide bonds?",
+            "back": "Cysteine.",
+            "reasoning": "Disulfide bonds stabilize tertiary/quaternary protein structure, which shows up in passages on protein folding."
+        },
+        {
+            "kind": "memory",
+            "section": "bb",
+            "topic_ids": ["bb.enzymes"],
+            "difficulty": 2,
+            "source_id": "scaffold",
+            "front": "In Michaelis-Menten kinetics, what does Km approximate?",
+            "back": "The substrate concentration at which reaction velocity is half of Vmax (an inverse proxy for substrate affinity).",
+            "reasoning": "Km vs Vmax distinctions drive most enzyme-inhibition passage questions."
+        },
+        {
+            "kind": "memory",
+            "section": "bb",
+            "topic_ids": ["bb.metabolism"],
+            "difficulty": 3,
+            "source_id": "scaffold",
+            "front": "Net ATP yield from glycolysis (per glucose)?",
+            "back": "2 ATP (and 2 NADH).",
+            "reasoning": "Energy bookkeeping recurs in metabolism data sets."
+        },
+
+        {
+            "kind": "performance",
+            "section": "bb",
+            "topic_ids": ["bb.enzymes"],
+            "difficulty": 3,
+            "source_id": "scaffold",
+            "skill": "experimental design",
+            "question": "An enzyme assay shows Vmax unchanged but Km increased when inhibitor X is added. X most likely acts as a:",
+            "choices": {
+                "A": "Competitive inhibitor",
+                "B": "Noncompetitive inhibitor",
+                "C": "Uncompetitive inhibitor",
+                "D": "Irreversible inhibitor"
+            },
+            "correct": "A",
+            "explanation": "Competitive inhibitors raise apparent Km (lower affinity) while Vmax can still be reached at high substrate."
+        },
+        {
+            "kind": "performance",
+            "section": "bb",
+            "topic_ids": ["bb.metabolism"],
+            "difficulty": 3,
+            "source_id": "scaffold",
+            "skill": "data interpretation",
+            "question": "A cell is treated with a drug that uncouples the electron transport chain from ATP synthase. The most direct result is:",
+            "choices": {
+                "A": "Increased ATP synthesis",
+                "B": "Heat production with little ATP synthesis",
+                "C": "Halted oxygen consumption",
+                "D": "Increased proton gradient"
+            },
+            "correct": "B",
+            "explanation": "Uncouplers dissipate the proton gradient as heat, so electron transport continues but ATP synthesis drops."
+        },
+        {
+            "kind": "performance",
+            "section": "bb",
+            "topic_ids": ["bb.cell_biology"],
+            "difficulty": 2,
+            "source_id": "scaffold",
+            "skill": "mechanism transfer",
+            "question": "A membrane protein moves Na+ down its gradient to pull glucose into the cell against its gradient. This is best described as:",
+            "choices": {
+                "A": "Simple diffusion",
+                "B": "Primary active transport",
+                "C": "Secondary active transport",
+                "D": "Facilitated diffusion of glucose alone"
+            },
+            "correct": "C",
+            "explanation": "Energy from one ion's gradient drives a second solute uphill: secondary active transport."
+        },
+        {
+            "kind": "performance",
+            "section": "bb",
+            "topic_ids": ["bb.experimental_methods"],
+            "difficulty": 3,
+            "source_id": "scaffold",
+            "skill": "experimental setup",
+            "question": "Researchers want to separate proteins purely by size. The best technique is:",
+            "choices": {
+                "A": "Native PAGE",
+                "B": "SDS-PAGE",
+                "C": "Isoelectric focusing",
+                "D": "Affinity chromatography"
+            },
+            "correct": "B",
+            "explanation": "SDS denatures and coats proteins with uniform negative charge, so migration depends on size."
+        },
+
+        {
+            "kind": "memory",
+            "section": "cp",
+            "topic_ids": ["cp.acid_base"],
+            "difficulty": 2,
+            "source_id": "scaffold",
+            "front": "What is the Henderson-Hasselbalch relationship?",
+            "back": "pH = pKa + log([A-]/[HA]).",
+            "reasoning": "Buffer reasoning is common in both Chem/Phys and Bio passages."
+        },
+        {
+            "kind": "memory",
+            "section": "cp",
+            "topic_ids": ["cp.energy_work"],
+            "difficulty": 2,
+            "source_id": "scaffold",
+            "front": "Define power in terms of work and time.",
+            "back": "Power = work / time (watts = joules/second).",
+            "reasoning": "Unit reasoning and estimation depend on this."
+        },
+        {
+            "kind": "memory",
+            "section": "cp",
+            "topic_ids": ["cp.fluids"],
+            "difficulty": 3,
+            "source_id": "scaffold",
+            "front": "State the continuity equation for an incompressible fluid.",
+            "back": "A1v1 = A2v2 (flow rate is constant; smaller area means higher velocity).",
+            "reasoning": "Drives many fluid-dynamics graph questions."
+        },
+
+        {
+            "kind": "performance",
+            "section": "cp",
+            "topic_ids": ["cp.acid_base"],
+            "difficulty": 3,
+            "source_id": "scaffold",
+            "skill": "proportional reasoning",
+            "question": "A buffer has equal concentrations of weak acid and conjugate base. Its pH is closest to:",
+            "choices": {
+                "A": "0",
+                "B": "7 regardless of acid",
+                "C": "The pKa of the weak acid",
+                "D": "14 minus the pKa"
+            },
+            "correct": "C",
+            "explanation": "When [A-] = [HA], log(1) = 0, so pH = pKa."
+        },
+        {
+            "kind": "performance",
+            "section": "cp",
+            "topic_ids": ["cp.kinematics"],
+            "difficulty": 2,
+            "source_id": "scaffold",
+            "skill": "estimation",
+            "question": "An object dropped from rest falls for 2 s. Ignoring air resistance, its approximate speed at 2 s is:",
+            "choices": { "A": "5 m/s", "B": "10 m/s", "C": "20 m/s", "D": "40 m/s" },
+            "correct": "C",
+            "explanation": "v = g·t ≈ 10 m/s² × 2 s = 20 m/s."
+        },
+        {
+            "kind": "performance",
+            "section": "cp",
+            "topic_ids": ["cp.fluids"],
+            "difficulty": 3,
+            "source_id": "scaffold",
+            "skill": "graph interpretation",
+            "question": "Fluid flows through a pipe that narrows to half its cross-sectional area. The fluid velocity in the narrow section:",
+            "choices": { "A": "Halves", "B": "Stays the same", "C": "Doubles", "D": "Quadruples" },
+            "correct": "C",
+            "explanation": "By continuity A1v1 = A2v2; halving area doubles velocity."
+        },
+        {
+            "kind": "performance",
+            "section": "cp",
+            "topic_ids": ["cp.electrochem"],
+            "difficulty": 3,
+            "source_id": "scaffold",
+            "skill": "setup selection",
+            "question": "In a galvanic cell, oxidation occurs at the:",
+            "choices": {
+                "A": "Cathode, which is positive",
+                "B": "Anode, which is negative",
+                "C": "Cathode, which is negative",
+                "D": "Anode, which is positive"
+            },
+            "correct": "B",
+            "explanation": "In a galvanic (spontaneous) cell, oxidation occurs at the anode, which carries a negative charge."
+        },
+
+        {
+            "kind": "memory",
+            "section": "ps",
+            "topic_ids": ["ps.learning_memory"],
+            "difficulty": 2,
+            "source_id": "scaffold",
+            "front": "Distinguish negative reinforcement from punishment.",
+            "back": "Negative reinforcement removes an aversive stimulus to increase a behavior; punishment decreases a behavior.",
+            "reasoning": "A classic 'sounds right' trap in Psych/Soc scenarios."
+        },
+        {
+            "kind": "memory",
+            "section": "ps",
+            "topic_ids": ["ps.social_psych"],
+            "difficulty": 2,
+            "source_id": "scaffold",
+            "front": "What is the fundamental attribution error?",
+            "back": "Over-attributing others' behavior to disposition rather than situation.",
+            "reasoning": "Frequently tested by contrasting nearby social-psych concepts."
+        },
+        {
+            "kind": "memory",
+            "section": "ps",
+            "topic_ids": ["ps.research_methods"],
+            "difficulty": 3,
+            "source_id": "scaffold",
+            "front": "What does a p-value below 0.05 conventionally indicate?",
+            "back": "Results at least this extreme would occur under the null hypothesis less than 5% of the time (statistical significance by convention).",
+            "reasoning": "Study-design questions hinge on interpreting statistics correctly."
+        },
+
+        {
+            "kind": "performance",
+            "section": "ps",
+            "topic_ids": ["ps.learning_memory"],
+            "difficulty": 3,
+            "source_id": "scaffold",
+            "skill": "scenario application",
+            "question": "A child stops whining once a parent gives in to the demand, and the parent gives in more often over time. The parent's giving-in behavior is being maintained by:",
+            "choices": {
+                "A": "Positive punishment",
+                "B": "Negative reinforcement",
+                "C": "Positive reinforcement",
+                "D": "Extinction"
+            },
+            "correct": "B",
+            "explanation": "The parent's behavior removes the aversive whining, increasing the giving-in behavior: negative reinforcement."
+        },
+        {
+            "kind": "performance",
+            "section": "ps",
+            "topic_ids": ["ps.social_psych"],
+            "difficulty": 3,
+            "source_id": "scaffold",
+            "skill": "distinguishing theories",
+            "question": "A study finds people work less hard in large groups on a collective task. This best illustrates:",
+            "choices": { "A": "Social facilitation", "B": "Groupthink", "C": "Social loafing", "D": "Deindividuation" },
+            "correct": "C",
+            "explanation": "Reduced individual effort in groups on a shared task is social loafing."
+        },
+        {
+            "kind": "performance",
+            "section": "ps",
+            "topic_ids": ["ps.research_methods"],
+            "difficulty": 2,
+            "source_id": "scaffold",
+            "skill": "study design",
+            "question": "A researcher wants to claim a causal effect of a new therapy. The strongest design is:",
+            "choices": {
+                "A": "Case study",
+                "B": "Correlational survey",
+                "C": "Randomized controlled experiment",
+                "D": "Retrospective interview"
+            },
+            "correct": "C",
+            "explanation": "Random assignment and a control group support causal claims."
+        },
+        {
+            "kind": "performance",
+            "section": "ps",
+            "topic_ids": ["ps.cognition"],
+            "difficulty": 3,
+            "source_id": "scaffold",
+            "skill": "avoiding familiarity trap",
+            "question": "Recognizing a face but being unable to recall the person's name is a failure primarily of:",
+            "choices": { "A": "Encoding", "B": "Retrieval", "C": "Sensory memory", "D": "Working memory capacity" },
+            "correct": "B",
+            "explanation": "The information was stored (recognition succeeds) but cannot be accessed: a retrieval failure."
+        },
+
+        {
+            "kind": "performance",
+            "section": "cars",
+            "topic_ids": ["cars.main_idea"],
+            "difficulty": 3,
+            "source_id": "scaffold",
+            "skill": "main idea",
+            "question": "An author argues that 'efficiency' has quietly replaced 'meaning' as the dominant value in modern work, and laments this. The author's primary purpose is to:",
+            "choices": {
+                "A": "Provide a neutral history of workplace metrics",
+                "B": "Critique a cultural shift the author finds troubling",
+                "C": "Recommend specific productivity software",
+                "D": "Prove efficiency is mathematically optimal"
+            },
+            "correct": "B",
+            "explanation": "The lamenting tone signals critique of a shift, not neutral description or a how-to."
+        },
+        {
+            "kind": "performance",
+            "section": "cars",
+            "topic_ids": ["cars.argument_structure"],
+            "difficulty": 4,
+            "source_id": "scaffold",
+            "skill": "argument structure",
+            "question": "Which would most weaken an author's claim that 'standardized testing fails to predict success'?",
+            "choices": {
+                "A": "A survey showing students dislike tests",
+                "B": "Evidence that test scores strongly correlate with later career outcomes",
+                "C": "A definition of 'success' the author already used",
+                "D": "An anecdote about one successful person who tested poorly"
+            },
+            "correct": "B",
+            "explanation": "Strong predictive correlation directly contradicts the claim; the anecdote is weak and the survey is irrelevant."
+        },
+        {
+            "kind": "performance",
+            "section": "cars",
+            "topic_ids": ["cars.inference"],
+            "difficulty": 3,
+            "source_id": "scaffold",
+            "skill": "inference",
+            "question": "An author writes: 'We praise originality, yet reward imitation.' This most strongly implies the author believes:",
+            "choices": {
+                "A": "Imitation is always harmful",
+                "B": "Stated values and actual incentives can diverge",
+                "C": "Originality cannot be measured",
+                "D": "Rewards should be abolished"
+            },
+            "correct": "B",
+            "explanation": "The contrast points to a gap between professed values and real incentives, without the extreme claims."
+        },
+        {
+            "kind": "performance",
+            "section": "cars",
+            "topic_ids": ["cars.tone_attitude"],
+            "difficulty": 3,
+            "source_id": "scaffold",
+            "skill": "tone",
+            "question": "An author describes a rival theory as 'seductive but ultimately hollow.' The author's attitude is best described as:",
+            "choices": {
+                "A": "Enthusiastic endorsement",
+                "B": "Reluctant skepticism",
+                "C": "Complete indifference",
+                "D": "Confused ambivalence"
+            },
+            "correct": "B",
+            "explanation": "'Seductive but hollow' acknowledges appeal while rejecting it: reluctant skepticism."
+        },
+
+        {
+            "kind": "cars",
+            "section": "cars",
+            "topic_ids": ["cars.argument_structure"],
+            "difficulty": 3,
+            "source_id": "scaffold",
+            "skill_type": "argument_structure",
+            "passage": "The author contends that cities should prioritize public transit over private cars, arguing that shared infrastructure produces more freedom, not less. They claim that a person without a car in a transit-rich city can reach more destinations, more reliably, than a car owner stuck in congestion. Critics of car culture, the author says, are not against mobility but against a narrow and costly form of it.",
+            "author_claim": "Investing in public transit expands individual freedom more than private car ownership does.",
+            "debate_prompts": [
+                "What is the author trying to make you accept?",
+                "Argue against the author: where is the argument weakest?",
+                "Now defend the author: what is the strongest version of this claim?",
+                "New condition: a city is very low-density and spread out. Does the argument get stronger, weaker, or stay the same?"
+            ]
+        }
+    ]
+}

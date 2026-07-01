@@ -1,0 +1,25 @@
+# MCAT Speedrun — Rust ↔ iOS FFI layer.
+#
+# This wraps the shared Anki/MCAT engine (rslib) with a C ABI that Swift can
+# call. It declares its own [workspace] so it is isolated from the desktop
+# cargo workspace at the repo root (the desktop build never compiles this).
+[workspace]
+
+[package]
+name = "mcat-ffi"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+publish = false
+
+[lib]
+name = "mcat_ffi"
+# staticlib -> a .a we bundle into an .xcframework for the Swift app.
+crate-type = ["staticlib"]
+
+[dependencies]
+anki = { path = "../../rslib" }
+# rslib relies on Cargo feature unification (from its desktop siblings) to turn
+# on tokio's io-util etc. Building it standalone for iOS, we must enable those
+# features here so the shared tokio has everything rslib uses.
+tokio = { version = "1.45", features = ["full"] }

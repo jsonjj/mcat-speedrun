@@ -1,0 +1,215 @@
+// Copyright: Ankitects Pty Ltd and contributors
+// License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
+
+// Premium, calm, evidence-first product styling for MCAT Speedrun.
+// Original design direction (see .cursor/rules/stripe-inspired-ui.mdc).
+
+// Rounded, friendly type to match the mockups. "Nunito Variable" is bundled
+// (via @fontsource-variable/nunito) so the look is identical everywhere,
+// including QtWebEngine where ui-rounded does not resolve to SF Pro Rounded.
+$mcat-font: "Nunito Variable", "Nunito", ui-rounded, "SF Pro Rounded", "Segoe UI",
+    system-ui, sans-serif;
+
+:root {
+    --mcat-bg: #f3f4f9;
+    --mcat-surface: #ffffff;
+    --mcat-surface-2: #f6f7fb;
+    --mcat-border: #e8eaf2;
+    --mcat-text: #232c3d;
+    --mcat-muted: #8a93a6;
+    --mcat-accent: #5663ea;
+    --mcat-accent-2: #6f7bf0;
+    // Activity / evidence colours (consistent meaning across the app).
+    --mcat-green: #2fa96b; // done / completed · strong evidence
+    --mcat-cyan: #0ea5e9; // Spaced Review · memory recall
+    --mcat-amber: #df9a2f; // Performance Set · moderate evidence
+    --mcat-blue: #5663ea; // Section Practice · primary
+    --mcat-red: #df5e79; // thin evidence · abstaining
+    --mcat-track: #e9ebf2; // range-bar / node connector track
+    // Legacy aliases (older pages).
+    --mcat-good: var(--mcat-green);
+    --mcat-warn: var(--mcat-amber);
+    --mcat-bad: var(--mcat-red);
+    --mcat-radius: 18px;
+    --mcat-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 10px 30px rgba(16, 24, 40, 0.07);
+}
+
+// Self-controlled dark theme (toggled from the dashboard switch). Same ideas,
+// dark surfaces; evidence card tints are derived via color-mix so they adapt.
+// (This file is imported as a plain global stylesheet, so no :global() wrapper.)
+.mcat-app.dark {
+    // Render native controls (date picker icon/popup, scrollbars) dark-themed.
+    color-scheme: dark;
+    --mcat-bg: #0f1422;
+    --mcat-surface: #181f30;
+    --mcat-surface-2: #202840;
+    --mcat-border: #2a3349;
+    --mcat-text: #e9ecf5;
+    --mcat-muted: #98a2b8;
+    --mcat-accent: #6f7bf0;
+    --mcat-accent-2: #8b94f4;
+    --mcat-green: #36b877;
+    --mcat-cyan: #38bdf8;
+    --mcat-amber: #e6a93f;
+    --mcat-blue: #7d8af2;
+    --mcat-red: #e87490;
+    --mcat-track: #2a3349;
+    --mcat-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 34px rgba(0, 0, 0, 0.45);
+}
+
+// Anki's webview paints its own canvas colour behind the page; reset the
+// document so there's no stray band above our app and the background matches.
+html,
+body {
+    margin: 0;
+    padding: 0;
+    background: var(--mcat-bg);
+}
+
+.mcat-app {
+    min-height: 100vh;
+    color-scheme: light;
+    background: var(--mcat-bg);
+    color: var(--mcat-text);
+    font-family: $mcat-font;
+    -webkit-font-smoothing: antialiased;
+    font-size: 16px;
+    line-height: 1.5;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+// Form controls don't inherit font-family by default; force the rounded font.
+.mcat-app button,
+.mcat-app input,
+.mcat-app select,
+.mcat-app textarea {
+    font-family: $mcat-font;
+}
+
+// Safety net: typed text in any field uses the theme text colour (never black
+// on a dark background) unless a component overrides it.
+.mcat-app input,
+.mcat-app select,
+.mcat-app textarea {
+    color: var(--mcat-text);
+}
+
+.mcat-container {
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 22px 30px 40px;
+}
+
+.mcat-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+}
+
+.mcat-title {
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    margin: 0;
+}
+
+.mcat-subtitle {
+    color: var(--mcat-muted);
+    font-size: 17px;
+    margin: 6px 0 0;
+}
+
+.mcat-nav {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.mcat-card {
+    background: var(--mcat-surface);
+    border: 1px solid var(--mcat-border);
+    border-radius: var(--mcat-radius);
+    box-shadow: var(--mcat-shadow);
+    padding: 22px;
+    font-size: 15px;
+}
+
+.mcat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+// Prefixed with .mcat-app so these beat Anki's global `button:not(...)` rules
+// (otherwise its hover gradient overrides our colors and can clash with text).
+.mcat-app .mcat-btn {
+    appearance: none;
+    border: 1px solid var(--mcat-border);
+    background: var(--mcat-surface);
+    color: var(--mcat-text);
+    border-radius: 10px;
+    padding: 11px 18px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.08s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+
+.mcat-app .mcat-btn:hover {
+    background: var(--mcat-surface-2);
+    color: var(--mcat-text);
+    box-shadow: var(--mcat-shadow);
+}
+
+.mcat-app .mcat-btn:active {
+    transform: translateY(1px);
+}
+
+.mcat-app .mcat-btn.mcat-btn-primary {
+    background: linear-gradient(135deg, var(--mcat-accent), var(--mcat-accent-2));
+    border: none;
+    color: #fff;
+}
+
+.mcat-app .mcat-btn.mcat-btn-primary:hover {
+    background: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--mcat-accent), white 10%),
+        color-mix(in srgb, var(--mcat-accent-2), white 10%)
+    );
+    color: #fff;
+}
+
+.mcat-app .mcat-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.mcat-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    border: 1px solid var(--mcat-border);
+    color: var(--mcat-muted);
+}
+
+.mcat-muted {
+    color: var(--mcat-muted);
+}
+
+.mcat-good {
+    color: var(--mcat-good);
+}
+.mcat-warn {
+    color: var(--mcat-warn);
+}
+.mcat-bad {
+    color: var(--mcat-bad);
+}
