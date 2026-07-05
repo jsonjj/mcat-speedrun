@@ -201,6 +201,10 @@ struct EvidenceCardView: View {
     var block: ScoreBlock
     var scaleMin: Double = 0
     var scaleMax: Double = 100
+    // Optional real trend (rolling accuracy %) + net delta; when set, a sparkline
+    // and a +/- chip are shown. The dashboard leaves these empty (no sparkline).
+    var trend: [Double] = []
+    var delta: Int = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -226,6 +230,19 @@ struct EvidenceCardView: View {
                 Circle().fill(block.tone.color).frame(width: 7, height: 7)
                 Text(block.abstained ? "Not enough evidence yet" : block.tone.label)
                     .font(Theme.font(13, .semibold)).foregroundStyle(block.tone.color)
+                if trend.count > 1, delta != 0 {
+                    Spacer(minLength: 0)
+                    Text("\(delta > 0 ? "+" : "−")\(abs(delta))")
+                        .font(Theme.font(12, .heavy))
+                        .foregroundStyle(delta > 0 ? Theme.green : Theme.red)
+                        .padding(.horizontal, 7).padding(.vertical, 2)
+                        .background(
+                            Capsule().fill(
+                                (delta > 0 ? Theme.green : Theme.red).opacity(0.14)))
+                }
+            }
+            if trend.count > 1 {
+                Sparkline(points: trend, color: block.tone.color)
             }
         }
         .cardStyle(tint: block.tone.color)

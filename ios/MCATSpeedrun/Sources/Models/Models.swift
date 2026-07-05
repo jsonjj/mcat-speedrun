@@ -168,6 +168,12 @@ struct RoadmapItem: Identifiable {
     var destination: StudyDestination
 }
 
+/// A completed block's tally (correct/total), shown on the roadmap node.
+struct BlockScore: Codable, Equatable {
+    var correct: Int
+    var total: Int
+}
+
 struct QuizConfig: Hashable {
     var title: String
     var sections: [SectionCode]

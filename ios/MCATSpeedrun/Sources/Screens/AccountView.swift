@@ -242,7 +242,8 @@ struct AccountView: View {
     // MARK: - Scores
 
     private var scoresList: some View {
-        VStack(spacing: 12) {
+        let t = Scoring.trends(progress: progress)
+        return VStack(spacing: 12) {
             ForEach(ScoreKind.allCases) { kind in
                 NavigationLink {
                     ScoreDetailView(kind: kind)
@@ -252,7 +253,11 @@ struct AccountView: View {
                         icon: kind.icon,
                         block: block(for: kind),
                         scaleMin: kind == .readiness ? 472 : 0,
-                        scaleMax: kind == .readiness ? 528 : 100
+                        scaleMax: kind == .readiness ? 528 : 100,
+                        trend: kind == .memory
+                            ? t.recall : (kind == .performance ? t.applied : []),
+                        delta: kind == .memory
+                            ? t.recallDelta : (kind == .performance ? t.appliedDelta : 0)
                     )
                 }
                 .buttonStyle(.plain)

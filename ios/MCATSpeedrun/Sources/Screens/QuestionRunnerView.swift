@@ -848,7 +848,9 @@ struct QuestionRunnerView: View {
     private func reportComplete() {
         guard !reported else { return }
         reported = true
-        app.completeActiveLaunch()
+        // Record the first-try score so the roadmap node shows a tally.
+        let correct = items.indices.filter { firstChoices[$0] == items[$0].correct }.count
+        app.completeActiveLaunch(score: BlockScore(correct: correct, total: items.count))
     }
 
     private func resetTimer() {

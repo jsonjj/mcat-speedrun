@@ -162,6 +162,55 @@ def _account_stats(col: Any) -> dict[str, Any]:
     }
 
 
+def _trend_series(flags: list[bool]) -> tuple[list[int], int]:
+    """A real trend of a measured %: rolling-window accuracy over the events in
+    time order, downsampled to <=16 points, plus the net change (last - first).
+    Returns ([], 0) until there's enough evidence (>=4 events) to be meaningful."""
+    n = len(flags)
+    if n < 4:
+        return [], 0
+    window = max(3, n // 3)
+    roll = [
+        round(
+            100
+            * sum(flags[max(0, i - window + 1) : i + 1])
+            / (i - max(0, i - window + 1) + 1)
+        )
+        for i in range(n)
+    ]
+    k = 16
+    if len(roll) <= k:
+        points = roll
+    else:
+        points = [roll[round(j * (len(roll) - 1) / (k - 1))] for j in range(k)]
+    return points, points[-1] - points[0]
+
+
+def _account_trend(col: Any) -> dict[str, Any]:
+    """Recall/applied trend sparklines from the (merged) engine log — the same
+    honest running-accuracy both apps can reproduce from the shared log."""
+    combined = json.loads(
+        col._backend.mcat_merge(
+            state_json=json.dumps(store.get_mcat_log(col)),
+            other_json=json.dumps(store.get_remote_mcat_log(col)),
+        )
+    )
+    reviews = sorted(combined.get("reviews", []), key=lambda r: r.get("ts", 0))
+    attempts = sorted(combined.get("attempts", []), key=lambda a: a.get("ts", 0))
+    recall, recall_delta = _trend_series(
+        [int(r.get("rating", 0)) >= 3 for r in reviews]
+    )
+    applied, applied_delta = _trend_series(
+        [bool(a.get("first_correct")) for a in attempts]
+    )
+    return {
+        "recall": recall,
+        "applied": applied,
+        "recall_delta": recall_delta,
+        "applied_delta": applied_delta,
+    }
+
+
 def mcat_account() -> bytes:
     col = _col()
     firebase_sync.pull(col)  # best-effort: reflect changes made on other devices
@@ -172,6 +221,7 @@ def mcat_account() -> bytes:
             "streak": store.get_streak(col),
             "scores": scoring.compute_scores(col) if has_content else None,
             "stats": _account_stats(col),
+            "trend": _account_trend(col),
         }
     )
 

@@ -17,6 +17,9 @@ struct FlashcardsView: View {
     @State private var idx = 0
     @State private var revealed = false
     @State private var reported = false
+    // Recall tally for the roadmap node score (anything but "Again" = recalled).
+    @State private var graded = 0
+    @State private var recalled = 0
     @State private var doneIn = false
 
     init(sections: [SectionCode] = SectionCode.allCases, limit: Int = 12) {
@@ -212,6 +215,8 @@ struct FlashcardsView: View {
         if idx < cards.count {
             progress.recordReview(
                 section: cards[idx].section, cardKey: cards[idx].key, rating: rating)
+            graded += 1
+            if rating != 1 { recalled += 1 }
         }
         // Reset the flip and ease the next card in as one transaction.
         withAnimation(.easeOut(duration: 0.3)) {
@@ -220,7 +225,7 @@ struct FlashcardsView: View {
         }
         if isComplete && !reported {
             reported = true
-            app.completeActiveLaunch()
+            app.completeActiveLaunch(score: BlockScore(correct: recalled, total: graded))
         }
     }
 

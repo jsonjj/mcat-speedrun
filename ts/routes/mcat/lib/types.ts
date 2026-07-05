@@ -190,11 +190,19 @@ export interface AccountStats {
     studied_hours: number;
 }
 
+export interface AccountTrend {
+    recall: number[];
+    applied: number[];
+    recall_delta: number;
+    applied_delta: number;
+}
+
 export interface AccountData {
     profile: Profile;
     streak: Streak;
     scores: Scores | null;
     stats?: AccountStats;
+    trend?: AccountTrend;
 }
 
 export interface CarsPassage {

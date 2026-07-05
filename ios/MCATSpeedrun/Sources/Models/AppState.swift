@@ -37,6 +37,9 @@ final class AppState: ObservableObject {
     // Roadmap progress: stable block keys (slugs) that are complete. Keys match
     // the desktop planner exactly, so progress syncs across devices.
     @Published var completedKeys: Set<String> = []
+    // Per-block score tally for today's completed blocks (local; shown on the
+    // roadmap). Persisted for today only, so it survives an app relaunch.
+    @Published var blockScores: [String: BlockScore] = [:]
     // Dev "Set mastery" override (0...100). When set, dashboard scores reflect it.
     @Published var devMastery: Double? { didSet { syncHook?() } }
     // Synced study settings + streak.
@@ -69,6 +72,24 @@ final class AppState: ObservableObject {
         darkMode = UserDefaults.standard.bool(forKey: Keys.dark)
         soundOn = (UserDefaults.standard.object(forKey: Keys.sound) as? Bool) ?? true
         SoundManager.shared.setEnabled(soundOn)
+        loadBlockScores()
+    }
+
+    private func loadBlockScores() {
+        let today = AppState.dayString(Date())
+        guard UserDefaults.standard.string(forKey: "mcat.blockScores.date") == today,
+            let data = UserDefaults.standard.data(forKey: "mcat.blockScores"),
+            let dict = try? JSONDecoder().decode([String: BlockScore].self, from: data)
+        else { return }
+        blockScores = dict
+    }
+
+    private func saveBlockScores() {
+        UserDefaults.standard.set(
+            AppState.dayString(Date()), forKey: "mcat.blockScores.date")
+        if let data = try? JSONEncoder().encode(blockScores) {
+            UserDefaults.standard.set(data, forKey: "mcat.blockScores")
+        }
     }
 
     /// Days until the exam (used by the dashboard ring); nil if no date set.
@@ -161,8 +182,12 @@ final class AppState: ObservableObject {
     }
 
     /// Called by a study screen that was launched from the roadmap when it finishes.
-    func completeActiveLaunch() {
+    func completeActiveLaunch(score: BlockScore? = nil) {
         if let key = activeLaunchKey {
+            if let score, score.total > 0 {
+                blockScores[key] = score
+                saveBlockScores()
+            }
             markDone(key: key)
             activeLaunchKey = nil
         }
@@ -170,6 +195,8 @@ final class AppState: ObservableObject {
 
     func resetRoadmap() {
         completedKeys.removeAll()
+        blockScores = [:]
+        saveBlockScores()
         activeLaunchKey = nil
         syncHook?()
     }

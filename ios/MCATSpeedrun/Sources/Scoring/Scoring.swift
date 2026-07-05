@@ -90,6 +90,53 @@ enum Scoring {
         return out.sorted { $0.1 < $1.1 }.map { (code: $0.0, point: $0.1) }
     }
 
+    // MARK: - Trend sparklines (rolling accuracy from the shared log)
+
+    struct Trend {
+        var recall: [Double] = []
+        var applied: [Double] = []
+        var recallDelta: Int = 0
+        var appliedDelta: Int = 0
+    }
+
+    /// Real recall/applied trend series (rolling-window accuracy over the merged
+    /// event log in time order) + net deltas — the SAME algorithm the desktop
+    /// account endpoint uses, so the sparklines match across devices.
+    static func trends(progress: ProgressStore) -> Trend {
+        guard let data = progress.combinedLogJSON().data(using: .utf8),
+            let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return Trend() }
+        let reviews = (obj["reviews"] as? [[String: Any]]) ?? []
+        let attempts = (obj["attempts"] as? [[String: Any]]) ?? []
+        func ts(_ d: [String: Any]) -> Int { (d["ts"] as? Int) ?? 0 }
+        let recallFlags =
+            reviews.sorted { ts($0) < ts($1) }.map { ($0["rating"] as? Int ?? 0) >= 3 }
+        let appliedFlags =
+            attempts.sorted { ts($0) < ts($1) }.map { ($0["first_correct"] as? Bool) ?? false }
+        let (r, rd) = trendSeries(recallFlags)
+        let (a, ad) = trendSeries(appliedFlags)
+        return Trend(recall: r, applied: a, recallDelta: rd, appliedDelta: ad)
+    }
+
+    private static func trendSeries(_ flags: [Bool]) -> ([Double], Int) {
+        let n = flags.count
+        guard n >= 4 else { return ([], 0) }
+        let window = max(3, n / 3)
+        var roll: [Double] = []
+        for i in 0..<n {
+            let seg = flags[max(0, i - window + 1)...i]
+            roll.append((Double(seg.filter { $0 }.count) / Double(seg.count) * 100).rounded())
+        }
+        let k = 16
+        let points: [Double] =
+            roll.count <= k
+            ? roll
+            : (0..<k).map { j in
+                roll[Int((Double(j) * Double(roll.count - 1) / Double(k - 1)).rounded())]
+            }
+        return (points, Int((points.last ?? 0) - (points.first ?? 0)))
+    }
+
     // MARK: - Practice recommendation (weakest section + flashcards vs problems)
 
     /// The single "study this next" recommendation from the scores: the weakest

@@ -13,6 +13,7 @@ tallies).
     import { postJson } from "../lib/api";
     import { evidence, toneVar } from "../lib/blocks";
     import DaysRing from "../lib/DaysRing.svelte";
+    import Sparkline from "../lib/Sparkline.svelte";
     import Switch from "../lib/Switch.svelte";
     import type { AccountData, Profile, ScoreBlock } from "../lib/types";
 
@@ -99,6 +100,25 @@ tallies).
     $: paceFill = Math.min(100, (dailyMinutes / RECOMMENDED) * 100);
     $: remainingHr = Math.max(0, (RECOMMENDED - dailyMinutes) / 60);
     $: initial = (data?.profile.name ?? "?").slice(0, 1).toUpperCase();
+
+    // The two percent-based progress cards (Recall, Applied) with their real
+    // trend series + net deltas from the account endpoint.
+    $: pctCards = data?.scores
+        ? [
+              {
+                  label: "Recall",
+                  block: data.scores.memory,
+                  series: data.trend?.recall ?? [],
+                  delta: data.trend?.recall_delta ?? 0,
+              },
+              {
+                  label: "Applied",
+                  block: data.scores.performance,
+                  series: data.trend?.applied ?? [],
+                  delta: data.trend?.applied_delta ?? 0,
+              },
+          ]
+        : [];
 
     const AI_FEATURES = [
         { label: "Reasoning feedback", color: "var(--mcat-blue)" },
@@ -236,42 +256,38 @@ tallies).
         <h2 class="prog-heading">Your progress</h2>
         {#if data.scores}
             <section class="prog-cards">
-                <div class="prog {evidence(data.scores.memory).tone}">
-                    <div class="prog-lab">Recall</div>
-                    <div class="prog-val">
-                        {data.scores.memory.abstained
-                            ? "—"
-                            : `${pct(data.scores.memory)}%`}
+                {#each pctCards as c (c.label)}
+                    <div class="prog {evidence(c.block).tone}">
+                        <div class="prog-head">
+                            <span class="prog-lab">{c.label}</span>
+                            {#if c.series.length > 1 && c.delta !== 0}
+                                <span class="delta {c.delta > 0 ? 'up' : 'down'}">
+                                    {c.delta > 0 ? "+" : "−"}{Math.abs(c.delta)}
+                                </span>
+                            {/if}
+                        </div>
+                        <div class="prog-val">
+                            {c.block.abstained ? "—" : `${pct(c.block)}%`}
+                        </div>
+                        {#if c.series.length > 1}
+                            <Sparkline
+                                points={c.series}
+                                color={toneVar(evidence(c.block).tone)}
+                            />
+                        {:else}
+                            <div class="prog-track">
+                                <div
+                                    class="prog-fill"
+                                    style={`width:${pct(c.block)}%;background:${toneVar(evidence(c.block).tone)}`}
+                                ></div>
+                            </div>
+                        {/if}
+                        <div class="prog-sub">{evidence(c.block).label}</div>
                     </div>
-                    <div class="prog-track">
-                        <div
-                            class="prog-fill"
-                            style={`width:${pct(data.scores.memory)}%;background:${toneVar(evidence(data.scores.memory).tone)}`}
-                        ></div>
-                    </div>
-                    <div class="prog-sub">{evidence(data.scores.memory).label}</div>
-                </div>
-
-                <div class="prog {evidence(data.scores.performance).tone}">
-                    <div class="prog-lab">Applied</div>
-                    <div class="prog-val">
-                        {data.scores.performance.abstained
-                            ? "—"
-                            : `${pct(data.scores.performance)}%`}
-                    </div>
-                    <div class="prog-track">
-                        <div
-                            class="prog-fill"
-                            style={`width:${pct(data.scores.performance)}%;background:${toneVar(evidence(data.scores.performance).tone)}`}
-                        ></div>
-                    </div>
-                    <div class="prog-sub">
-                        {evidence(data.scores.performance).label}
-                    </div>
-                </div>
+                {/each}
 
                 <div class="prog {evidence(data.scores.readiness).tone}">
-                    <div class="prog-lab">Readiness</div>
+                    <div class="prog-head"><span class="prog-lab">Readiness</span></div>
                     <div class="prog-val">
                         {data.scores.readiness.abstained
                             ? "—"
@@ -582,10 +598,31 @@ tallies).
         background: color-mix(in srgb, var(--mcat-red) 7%, var(--mcat-surface));
         border-color: color-mix(in srgb, var(--mcat-red) 20%, var(--mcat-border));
     }
+    .prog-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+    }
     .prog-lab {
         font-size: 14px;
         font-weight: 700;
         color: var(--mcat-muted);
+    }
+    .delta {
+        font-size: 13px;
+        font-weight: 800;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-variant-numeric: tabular-nums;
+    }
+    .delta.up {
+        color: var(--mcat-green);
+        background: color-mix(in srgb, var(--mcat-green) 14%, transparent);
+    }
+    .delta.down {
+        color: var(--mcat-red);
+        background: color-mix(in srgb, var(--mcat-red) 14%, transparent);
     }
     .prog-val {
         font-size: 34px;

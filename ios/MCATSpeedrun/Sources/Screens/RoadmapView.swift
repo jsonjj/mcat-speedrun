@@ -12,6 +12,7 @@ import SwiftUI
 
 struct RoadmapView: View {
     @EnvironmentObject var app: AppState
+    @EnvironmentObject var progress: ProgressStore
     @State private var appeared = false
 
     var body: some View {
@@ -164,8 +165,15 @@ struct RoadmapView: View {
             Text(item.sub)
                 .font(Theme.font(13))
                 .foregroundStyle(Theme.muted)
+            if status == .active {
+                whyCard(whyFor(item))
+            }
             HStack(spacing: 8) {
-                Pill(text: "\(item.minutes) Min")
+                if status == .done, let sc = app.blockScores[item.key] {
+                    Pill(text: scoreLabel(item.key, sc), color: scoreColor(sc))
+                } else {
+                    Pill(text: "\(item.minutes) Min")
+                }
                 Spacer(minLength: 0)
                 if status != .locked {
                     Image(systemName: "chevron.right")
@@ -298,6 +306,184 @@ struct RoadmapView: View {
         }
     }
 
+    // MARK: - "Why this, now" + completed-node scores
+
+    private struct RoadWhy {
+        var title: String
+        var currentPct: Int?
+        var targetPct: Int?
+        var fact: String?
+    }
+
+    private func measureOf(_ item: RoadmapItem) -> String {
+        switch item.destination {
+        case .flashcards: return "memory"
+        case .questions: return "performance"
+        case .cars: return "cars"
+        }
+    }
+
+    private func sectionOf(_ item: RoadmapItem) -> SectionCode? {
+        switch item.destination {
+        case .flashcards(let s): return s.first
+        case .questions(let c): return c.sections.count == 1 ? c.sections.first : nil
+        case .cars: return .cars
+        }
+    }
+
+    private func shortName(_ c: SectionCode) -> String {
+        switch c {
+        case .bb: return "Bio/Biochem"
+        case .cp: return "Chem/Phys"
+        case .ps: return "Psych/Soc"
+        case .cars: return "CARS"
+        }
+    }
+
+    private func whyTone(_ pct: Int) -> Color {
+        pct < 70 ? Theme.red : (pct < 85 ? Theme.amber : Theme.green)
+    }
+
+    /// The grounded reason the current block was picked, from the measured scores
+    /// (mirrors the desktop roadmap's "Why this, now").
+    private func whyFor(_ item: RoadmapItem) -> RoadWhy {
+        let model = Scoring.model(app: app, progress: progress)
+        let measure = measureOf(item)
+        let section = sectionOf(item)
+        func overall(_ b: ScoreBlock) -> Int? {
+            b.abstained ? nil : b.point.map { Int($0.rounded()) }
+        }
+        let memPt = overall(model.memory)
+        let perfPt = overall(model.performance)
+
+        if measure == "cars" {
+            return RoadWhy(
+                title: "Sharpen your CARS reasoning", currentPct: nil, targetPct: nil,
+                fact: factFor(item, measure))
+        }
+
+        let m: Scoring.Measure = measure == "memory" ? .memory : .performance
+        let ranked = Scoring.sectionsRanked(app: app, progress: progress, measure: m)
+        let weakest = ranked.first?.code
+        let short = section.map { shortName($0) }
+        let current: Int? =
+            section != nil
+            ? ranked.first(where: { $0.code == section }).map { Int($0.point.rounded()) }
+            : (measure == "memory" ? memPt : perfPt)
+
+        let title: String
+        if measure == "memory" {
+            if let memPt, perfPt == nil || memPt <= perfPt! {
+                title = "Recall is your weakest"
+            } else if let section, weakest == section {
+                title = "\(short ?? "") recall needs work"
+            } else {
+                title = short.map { "Strengthen \($0) recall" } ?? "Lock in your recall"
+            }
+        } else if let perfPt, memPt == nil || perfPt < memPt! {
+            title = "Applying it is your weakest"
+        } else if let section, weakest == section {
+            title = "\(short ?? "") questions need work"
+        } else if let short {
+            title = "Build \(short) application"
+        } else {
+            title = "Warm up with a full mixed set"
+        }
+        let target = current.map { min(95, $0 + 8) }
+        return RoadWhy(
+            title: title, currentPct: current, targetPct: target,
+            fact: factFor(item, measure))
+    }
+
+    private func factFor(_ item: RoadmapItem, _ measure: String) -> String? {
+        let matches = app.roadmap.filter {
+            app.completedKeys.contains($0.key) && app.blockScores[$0.key] != nil
+                && measureOf($0) == measure
+        }
+        guard !matches.isEmpty else { return nil }
+        let sec = sectionOf(item)
+        let same = matches.filter { sectionOf($0) == sec }
+        guard let b = (same.isEmpty ? matches : same).last, let sc = app.blockScores[b.key]
+        else { return nil }
+        let frac = sc.total > 0 ? Double(sc.correct) / Double(sc.total) : 0
+        let qual = frac < 0.7 ? "shaky" : (frac >= 0.85 ? "strong" : "solid")
+        return "Last \(b.label): \(sc.correct)/\(sc.total) · \(qual)"
+    }
+
+    private var bestBlockKey: String? {
+        var best: (key: String, frac: Double)?
+        for (k, sc) in app.blockScores where sc.total > 0 {
+            let f = Double(sc.correct) / Double(sc.total)
+            if best == nil || f > best!.frac { best = (k, f) }
+        }
+        if let best, best.frac >= 0.8 { return best.key }
+        return nil
+    }
+
+    private func scoreColor(_ sc: BlockScore) -> Color {
+        let f = sc.total > 0 ? Double(sc.correct) / Double(sc.total) : 0
+        return f < 0.7 ? Theme.red : (f < 0.85 ? Theme.amber : Theme.green)
+    }
+
+    private func scoreLabel(_ key: String, _ sc: BlockScore) -> String {
+        let f = sc.total > 0 ? Double(sc.correct) / Double(sc.total) : 0
+        var s = "\(sc.correct)/\(sc.total)"
+        if key == bestBlockKey, f >= 0.8 {
+            s += " · best"
+        } else if f < 0.7 {
+            s += " · shaky"
+        }
+        return s
+    }
+
+    @ViewBuilder
+    private func whyCard(_ w: RoadWhy) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("WHY THIS, NOW")
+                .font(Theme.font(10, .heavy)).tracking(0.6).foregroundStyle(Theme.muted)
+            Text(w.title)
+                .font(Theme.font(15, .bold)).foregroundStyle(Theme.text)
+                .fixedSize(horizontal: false, vertical: true)
+            if let cur = w.currentPct {
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Theme.track).frame(height: 8)
+                        Capsule().fill(whyTone(cur))
+                            .frame(
+                                width: max(6, geo.size.width * CGFloat(cur) / 100), height: 8)
+                        if let t = w.targetPct {
+                            RoundedRectangle(cornerRadius: 1.5).fill(Theme.accent)
+                                .frame(width: 3, height: 13)
+                                .offset(x: geo.size.width * CGFloat(t) / 100 - 1.5)
+                        }
+                    }
+                    .frame(maxHeight: .infinity, alignment: .center)
+                }
+                .frame(height: 13)
+                HStack {
+                    Text("\(cur)% now")
+                        .font(Theme.font(12, .bold)).foregroundStyle(whyTone(cur))
+                    Spacer()
+                    if let t = w.targetPct {
+                        Text("→ ~\(t)%")
+                            .font(Theme.font(12, .bold)).foregroundStyle(Theme.accent)
+                    }
+                }
+            } else {
+                Text("Not measured yet — this set starts your estimate.")
+                    .font(Theme.font(12)).foregroundStyle(Theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let fact = w.fact {
+                Divider().overlay(Theme.border)
+                Text(fact).font(Theme.font(12)).foregroundStyle(Theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 12).fill(Theme.surface2))
+    }
+
     @ViewBuilder
     private func destinationView(for item: RoadmapItem) -> some View {
         switch item.destination {
@@ -356,6 +542,7 @@ private struct NodeCircle: View {
             }
         }
         .frame(width: 56, height: 56)
+        .scaleEffect(status == .active ? 1.16 : 1)  // the current node stands out
         .onAppear {
             guard status == .active else { return }
             withAnimation(.easeOut(duration: 1.6).repeatForever(autoreverses: false)) {
@@ -368,4 +555,5 @@ private struct NodeCircle: View {
 #Preview {
     NavigationStack { RoadmapView() }
         .environmentObject(AppState())
+        .environmentObject(ProgressStore())
 }
