@@ -230,7 +230,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
                         </div>
                         <div class="exam-marks">
                             <span class="m-edge">started</span>
-                            {#if days != null}
+                            {#if days != null && examPct >= 20 && examPct <= 80}
                                 <span class="m-now" style={`left:${examPct}%`}>
                                     {daysIn} days in
                                 </span>

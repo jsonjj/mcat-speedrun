@@ -387,7 +387,8 @@ struct DashboardView: View {
             Rectangle().fill(Theme.border).frame(width: 1, height: 48)
 
             HStack(spacing: 9) {
-                Text("🔥").font(.system(size: 20))
+                Image(systemName: "flame.fill").font(.system(size: 19))
+                    .foregroundStyle(Theme.amber)
                 VStack(alignment: .leading, spacing: 0) {
                     Text("\(app.streak)").font(Theme.font(20, .heavy))
                         .foregroundStyle(Theme.amber)
@@ -431,7 +432,7 @@ struct DashboardView: View {
                         Text("exam day")
                     }
                     .font(Theme.font(12, .bold)).foregroundStyle(Theme.muted)
-                    if has {
+                    if has, pct >= 0.2, pct <= 0.8 {
                         Text("\(daysIn) days in")
                             .font(Theme.font(12, .bold)).foregroundStyle(Theme.accent)
                             .position(x: x, y: 8)
