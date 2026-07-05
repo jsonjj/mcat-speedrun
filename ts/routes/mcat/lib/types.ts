@@ -125,6 +125,11 @@ export interface FirstPassResponse {
     results?: RevealResult[];
 }
 
+export interface BlockScore {
+    correct: number;
+    total: number;
+}
+
 export interface RoadmapBlock {
     id: string;
     kind: string;
@@ -134,7 +139,17 @@ export interface RoadmapBlock {
     minutes: number;
     required: boolean;
     completed: boolean;
+    score?: BlockScore | null;
     meta: Record<string, unknown>;
+}
+
+// Grounded reason the current roadmap block was picked (from measured scores).
+export interface WhyThis {
+    title: string;
+    metric: string;
+    current_pct: number | null;
+    target_pct: number | null;
+    fact: string | null;
 }
 
 export interface FullLengthGuidance {
@@ -164,12 +179,22 @@ export interface RoadmapResponse {
     streak: Streak;
     free_practice_unlocked: boolean;
     is_dev: boolean;
+    why?: WhyThis | null;
+}
+
+export interface AccountStats {
+    reps: number;
+    sets: number;
+    attempts: number;
+    debates: number;
+    studied_hours: number;
 }
 
 export interface AccountData {
     profile: Profile;
     streak: Streak;
     scores: Scores | null;
+    stats?: AccountStats;
 }
 
 export interface CarsPassage {

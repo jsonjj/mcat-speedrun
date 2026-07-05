@@ -136,6 +136,32 @@ def mcat_get_profile() -> bytes:
     )
 
 
+def _account_stats(col: Any) -> dict[str, Any]:
+    """Cumulative engagement tallies for the account page (all real counts; the
+    studied-time is a transparent estimate from activity, not a tracked clock)."""
+    combined = json.loads(
+        col._backend.mcat_merge(
+            state_json=json.dumps(store.get_mcat_log(col)),
+            other_json=json.dumps(store.get_remote_mcat_log(col)),
+        )
+    )
+    reviews = combined.get("reviews", [])
+    attempts = combined.get("attempts", [])
+    reps = len(reviews)
+    total_attempts = len(attempts)
+    sets = len({a.get("batch_id") for a in attempts if a.get("batch_id")})
+    debates = len(store.get_debates(col))
+    # Engagement estimate (~8s/flashcard, ~75s/question, ~4min/debate).
+    seconds = reps * 8 + total_attempts * 75 + debates * 240
+    return {
+        "reps": reps,
+        "sets": sets,
+        "attempts": total_attempts,
+        "debates": debates,
+        "studied_hours": round(seconds / 3600, 1),
+    }
+
+
 def mcat_account() -> bytes:
     col = _col()
     firebase_sync.pull(col)  # best-effort: reflect changes made on other devices
@@ -145,6 +171,7 @@ def mcat_account() -> bytes:
             "profile": _public(store.get_profile(col)),
             "streak": store.get_streak(col),
             "scores": scoring.compute_scores(col) if has_content else None,
+            "stats": _account_stats(col),
         }
     )
 
@@ -616,12 +643,149 @@ def _reveal(col: Any, note_id: int, first_correct: bool) -> dict[str, Any]:
 #############################################################################
 
 
+# Roadmap "why this, now" — a grounded reason for the current (active) block
+#############################################################################
+
+_SECTION_SHORT = {
+    schema.SECTION_BB: "Bio/Biochem",
+    schema.SECTION_CP: "Chem/Phys",
+    schema.SECTION_PS: "Psych/Soc",
+    schema.SECTION_CARS: "CARS",
+}
+_METRIC = {"memory": "recall", "performance": "accuracy", "cars": "reasoning"}
+
+
+def _block_measure(block: dict[str, Any]) -> str:
+    kind, mode = block.get("kind"), block.get("mode")
+    if kind == "cars" or mode == schema.MODE_DEBATE:
+        return "cars"
+    if kind == "memory" or mode == schema.MODE_MEMORY:
+        return "memory"
+    return "performance"
+
+
+def _pct(b: dict[str, Any] | None) -> int | None:
+    if not b or b.get("abstained") or b.get("point") is None:
+        return None
+    return round(float(b["point"]))
+
+
+def _recent_fact(
+    plan: dict[str, Any], block: dict[str, Any], measure: str
+) -> str | None:
+    """A grounded supporting fact from an already-finished block of the same kind
+    (prefer the same section) — e.g. 'Last Bio/Biochem Recall: 6/10 · shaky'."""
+    matches = [
+        b
+        for b in plan.get("blocks", [])
+        if b.get("completed")
+        and isinstance(b.get("score"), dict)
+        and int(b["score"].get("total", 0)) > 0
+        and _block_measure(b) == measure
+    ]
+    if not matches:
+        return None
+    same = [b for b in matches if b.get("section") == block.get("section")]
+    b = (same or matches)[-1]
+    correct, total = int(b["score"]["correct"]), int(b["score"]["total"])
+    frac = correct / total if total else 0
+    qual = "shaky" if frac < 0.7 else ("strong" if frac >= 0.85 else "solid")
+    return f"Last {b['label']}: {correct}/{total} · {qual}"
+
+
+def _why_title(
+    *,
+    measure: str,
+    section: str | None,
+    short: str | None,
+    weakest: str | None,
+    overall_mem: int | None,
+    overall_perf: int | None,
+    kind: str | None,
+) -> str:
+    """A short, grounded headline for why this block is next."""
+    if measure == "cars":
+        return "Sharpen your CARS reasoning"
+    if measure == "memory":
+        if overall_mem is not None and (
+            overall_perf is None or overall_mem <= overall_perf
+        ):
+            return "Recall is your weakest"
+        if section and weakest == section:
+            return f"{short} recall needs work"
+        return f"Strengthen {short} recall" if short else "Lock in your recall"
+    # performance
+    if overall_perf is not None and (overall_mem is None or overall_perf < overall_mem):
+        return "Applying it is your weakest"
+    if section and weakest == section:
+        return f"{short} questions need work"
+    if short:
+        return f"Build {short} application"
+    if kind == "mini_mcat":
+        return "Warm up with a full mixed set"
+    return "Practice exam-style questions"
+
+
+def _active_why(col: Any, plan: dict[str, Any]) -> dict[str, Any] | None:
+    """Explain why the current block was picked, grounded in the measured scores:
+    a short title, the current level in that area, a modest target, and a fact."""
+    block = next((b for b in plan.get("blocks", []) if not b.get("completed")), None)
+    if not block:
+        return None
+    measure = _block_measure(block)
+    section = block.get("section")
+    short = _SECTION_SHORT.get(section) if section else None
+
+    try:
+        scores = scoring.compute_scores(col)
+    except Exception:
+        scores = None
+
+    current: int | None = None
+    weakest: str | None = None
+    overall_mem = overall_perf = None
+    if scores:
+        overall_mem = _pct(scores.get("memory"))
+        overall_perf = _pct(scores.get("performance"))
+        if measure in ("memory", "performance"):
+            secs = scores.get("sections", {})
+            if section and section in secs:
+                current = _pct(secs[section].get(measure))
+            else:
+                current = _pct(scores.get(measure))
+            ranked = sorted(
+                ((code, _pct(s.get(measure))) for code, s in secs.items()),
+                key=lambda x: (x[1] is None, x[1] if x[1] is not None else 999),
+            )
+            weakest = next((code for code, p in ranked if p is not None), None)
+
+    title = _why_title(
+        measure=measure,
+        section=section,
+        short=short,
+        weakest=weakest,
+        overall_mem=overall_mem,
+        overall_perf=overall_perf,
+        kind=block.get("kind"),
+    )
+
+    target = None if current is None else min(95, current + 8)
+    return {
+        "title": title,
+        "metric": _METRIC[measure],
+        "current_pct": current,
+        "target_pct": target,
+        "fact": _recent_fact(plan, block, measure),
+    }
+
+
 def _roadmap_payload(col: Any, plan: dict[str, Any]) -> dict[str, Any]:
     return {
         "plan": plan,
         "streak": store.get_streak(col),
         "free_practice_unlocked": planner.required_complete(plan),
         "is_dev": bool(store.get_profile(col).get("is_dev")),
+        "why": _active_why(col, plan),
     }
 
 
@@ -641,7 +805,14 @@ def mcat_rebuild_roadmap() -> bytes:
 def mcat_complete_block() -> bytes:
     body = _body()
     col = _col()
-    plan = planner.complete_block(col, str(body.get("block_id", "")))
+    # The runner reports how the student did so the finished node shows a tally.
+    total = int(body.get("total", 0) or 0)
+    score = (
+        {"correct": int(body.get("correct", 0) or 0), "total": total}
+        if total > 0
+        else None
+    )
+    plan = planner.complete_block(col, str(body.get("block_id", "")), score=score)
     firebase_sync.push(col)  # sync roadmap progress + any streak change
     return _json(_roadmap_payload(col, plan))
 
@@ -751,14 +922,13 @@ def mcat_dev_complete_block() -> bytes:
     correct = max(0, min(total, int(body.get("correct", 0))))
 
     block = _find_block(col, block_id)
+    is_cars = block is not None and _block_measure(block) == "cars"
     if block is not None and total > 0:
         try:
-            kind = block.get("kind")
-            mode = block.get("mode")
             section = block.get("section")
-            if kind == "memory" or mode == schema.MODE_MEMORY:
+            if _block_measure(block) == "memory":
                 _dev_grade_memory(col, section=section, count=total, correct=correct)
-            elif kind == "cars" or mode == schema.MODE_DEBATE:
+            elif is_cars:
                 pass  # debate has no numeric score; just complete it
             else:
                 _dev_synth_perf(col, section=section, count=total, correct=correct)
@@ -766,7 +936,11 @@ def mcat_dev_complete_block() -> bytes:
             # Never let score synthesis block the actual completion/advance.
             pass
 
-    plan = planner.complete_block(col, block_id)
+    # CARS has no numeric score, so it never gets a tally badge.
+    dev_score = (
+        {"correct": correct, "total": total} if total > 0 and not is_cars else None
+    )
+    plan = planner.complete_block(col, block_id, score=dev_score)
     firebase_sync.push(col)  # sync roadmap progress + any streak change
     return _json(_roadmap_payload(col, plan))
 

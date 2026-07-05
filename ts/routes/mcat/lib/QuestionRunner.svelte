@@ -28,7 +28,9 @@ correctness is decided on the backend.
     // The diagnostic sets this false: a single pass, no "take another look".
     export let allowSecondPass = true;
 
-    const dispatch = createEventDispatcher<{ complete: { results: RevealResult[] } }>();
+    const dispatch = createEventDispatcher<{
+        complete: { results: RevealResult[]; correct: number; total: number };
+    }>();
 
     type FirstAnswer = {
         choice: string;
@@ -45,6 +47,9 @@ correctness is decided on the backend.
     let firstResp: FirstPassResponse | null = null;
     let results: RevealResult[] = [];
     let busy = false;
+    // Shows the full-card "reviewing…" loader while the (slow, AI-graded) second
+    // pass is scored, so the screen never looks frozen after the last submit.
+    let finishing = false;
 
     // Review flow: a grid overview, then a per-question walk-through with an
     // AI concept title + diagram + minimal text (rather than a wall of cards).
@@ -243,6 +248,7 @@ correctness is decided on the backend.
 
     async function submitSecond(): Promise<void> {
         busy = true;
+        finishing = true;
         try {
             const answers = batch.questions.map((item) => ({
                 note_id: item.note_id,
@@ -260,6 +266,7 @@ correctness is decided on the backend.
             stage = "results";
         } finally {
             busy = false;
+            finishing = false;
         }
     }
 
@@ -365,6 +372,23 @@ correctness is decided on the backend.
 </script>
 
 <div class="runner" style={`--accent:${accent}`}>
+    {#if finishing}
+        <div class="grading">
+            <div class="grading-card">
+                <span class="gen-dots" aria-hidden="true">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </span>
+                <div class="grading-title">Reviewing your answers…</div>
+                <p class="grading-sub">
+                    {aiEnabled
+                        ? "Grading your reasoning and preparing your personalized feedback."
+                        : "Scoring your answers and preparing your review."}
+                </p>
+            </div>
+        </div>
+    {/if}
     {#if stage === "first" || stage === "second"}
         <div class="rhead">
             <span class="rtag">
@@ -547,7 +571,12 @@ correctness is decided on the backend.
                 {#if allViewed}
                     <button
                         class="mcat-btn mcat-btn-primary rv-start"
-                        on:click={() => dispatch("complete", { results })}
+                        on:click={() =>
+                            dispatch("complete", {
+                                results,
+                                correct: firstRight,
+                                total: results.length,
+                            })}
                     >
                         Go to dashboard
                     </button>
@@ -678,7 +707,12 @@ correctness is decided on the backend.
                     {:else if allViewed}
                         <button
                             class="mcat-btn mcat-btn-primary pager-btn"
-                            on:click={() => dispatch("complete", { results })}
+                            on:click={() =>
+                                dispatch("complete", {
+                                    results,
+                                    correct: firstRight,
+                                    total: results.length,
+                                })}
                         >
                             Done
                         </button>
@@ -1382,5 +1416,56 @@ correctness is decided on the backend.
     .reasoning-input:focus {
         outline: none;
         border-color: var(--accent);
+    }
+    /* Full-screen "reviewing…" loader shown while the second pass is graded, so
+       the app clearly looks busy (not frozen) during the slow AI step. */
+    .grading {
+        position: fixed;
+        inset: 0;
+        z-index: 200;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background: color-mix(in srgb, var(--mcat-bg) 76%, transparent);
+        backdrop-filter: blur(5px);
+        animation: gradingIn 0.2s ease;
+    }
+    @keyframes gradingIn {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
+    .grading-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        text-align: center;
+        background: var(--mcat-surface);
+        border: 1px solid var(--mcat-border);
+        border-radius: 20px;
+        box-shadow: var(--mcat-shadow);
+        padding: 34px 40px;
+        max-width: 380px;
+    }
+    .grading-card .gen-dots span {
+        width: 13px;
+        height: 13px;
+    }
+    .grading-title {
+        font-size: 20px;
+        font-weight: 800;
+        color: var(--mcat-text);
+    }
+    .grading-sub {
+        margin: 0;
+        font-size: 14.5px;
+        font-weight: 500;
+        line-height: 1.45;
+        color: var(--mcat-muted);
     }
 </style>

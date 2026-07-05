@@ -54,11 +54,19 @@ is done) or from a roadmap block.
         loading = false;
     }
 
-    // Finishing a roadmap task marks its block done and returns to the roadmap;
-    // otherwise (Extra Practice) we show the normal done screen.
-    async function onComplete(): Promise<void> {
+    // Finishing a roadmap task marks its block done (recording the first-try
+    // score so the node shows a tally) and returns to the roadmap; otherwise
+    // (Extra Practice) we show the normal done screen.
+    async function onComplete(detail?: {
+        correct: number;
+        total: number;
+    }): Promise<void> {
         if (fromRoadmap && blockId) {
-            await postJson("mcatCompleteBlock", { block_id: blockId });
+            await postJson("mcatCompleteBlock", {
+                block_id: blockId,
+                correct: detail?.correct ?? 0,
+                total: detail?.total ?? 0,
+            });
             goto("/mcat/roadmap");
         } else {
             done = true;
@@ -150,7 +158,7 @@ is done) or from a roadmap block.
                 phase="daily"
                 label={section ? "Section Practice" : "Mini-MCAT"}
                 accent="var(--mcat-blue)"
-                on:complete={onComplete}
+                on:complete={(e) => onComplete(e.detail)}
             />
         {/key}
     {/if}

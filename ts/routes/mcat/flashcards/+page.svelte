@@ -43,6 +43,10 @@ Memory Recall score.
     let blockId: string | null = null;
     let fromRoadmap = false;
     let count = 15;
+    // Recall tally for the roadmap node score: anything but "Again" counts as
+    // recalled (the card came back to you).
+    let recalled = 0;
+    let graded = 0;
 
     async function load(): Promise<void> {
         loading = true;
@@ -58,7 +62,11 @@ Memory Recall score.
 
     async function finishDeck(): Promise<void> {
         if (fromRoadmap && blockId) {
-            await postJson("mcatCompleteBlock", { block_id: blockId });
+            await postJson("mcatCompleteBlock", {
+                block_id: blockId,
+                correct: recalled,
+                total: graded,
+            });
             goto("/mcat/roadmap");
         } else {
             idx = cards.length;
@@ -74,6 +82,10 @@ Memory Recall score.
             const c = cards[idx];
             if (c?.card_id) {
                 await postJson("mcatGradeCard", { card_id: c.card_id, rating });
+            }
+            graded += 1;
+            if (rating !== "again") {
+                recalled += 1;
             }
             if (idx + 1 < cards.length) {
                 idx += 1;

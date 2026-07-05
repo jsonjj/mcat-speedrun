@@ -301,11 +301,23 @@ def get_or_build_plan(col: anki.collection.Collection) -> dict[str, Any]:
     return plan
 
 
-def complete_block(col: anki.collection.Collection, block_id: str) -> dict[str, Any]:
+def complete_block(
+    col: anki.collection.Collection,
+    block_id: str,
+    *,
+    score: dict[str, int] | None = None,
+) -> dict[str, Any]:
+    """Mark a block complete. `score` = {correct, total} records how the student
+    did on the block (shown as a small tally on the roadmap); ignored when the
+    block has no numeric score (e.g. a CARS debate) or total is 0."""
     plan = get_or_build_plan(col)
     for block in plan["blocks"]:
         if block["id"] == block_id:
             block["completed"] = True
+            if score and int(score.get("total", 0)) > 0:
+                total = int(score["total"])
+                correct = max(0, min(total, int(score.get("correct", 0))))
+                block["score"] = {"correct": correct, "total": total}
             break
     store.set_plan(col, plan)
     _maybe_award_streak(col, plan)
@@ -349,6 +361,9 @@ def _block(
         "minutes": min(MAX_BLOCK_MINUTES, minutes),
         "required": required,
         "completed": False,
+        # {correct, total} filled in on completion; drives the roadmap's per-node
+        # score tally. None until the block is finished (or for unscored blocks).
+        "score": None,
         "meta": meta,
     }
 

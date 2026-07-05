@@ -72,9 +72,14 @@ final class AppState: ObservableObject {
     }
 
     /// Days until the exam (used by the dashboard ring); nil if no date set.
+    /// Counted midnight-to-midnight so it matches the desktop exactly — measuring
+    /// from the current time would floor away today's partial day and read one low.
     var daysToGo: Int? {
         guard let examDate else { return nil }
-        let days = Calendar.current.dateComponents([.day], from: Date(), to: examDate).day ?? 0
+        let cal = Calendar.current
+        let start = cal.startOfDay(for: Date())
+        let exam = cal.startOfDay(for: examDate)
+        let days = cal.dateComponents([.day], from: start, to: exam).day ?? 0
         return max(0, days)
     }
 

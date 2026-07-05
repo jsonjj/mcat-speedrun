@@ -22,6 +22,7 @@ streak node. Auto-scrolls to your current node.
         RoadmapResponse,
         Roadmap,
         Streak,
+        WhyThis,
     } from "../lib/types";
 
     const ROW = 196;
@@ -29,6 +30,7 @@ streak node. Auto-scrolls to your current node.
     let plan: Roadmap | null = null;
     let streak: Streak | null = null;
     let freePracticeUnlocked = false;
+    let why: WhyThis | null = null;
     let loading = true;
     let pathEl: HTMLDivElement | undefined;
 
@@ -50,7 +52,55 @@ streak node. Auto-scrolls to your current node.
         plan = resp.plan;
         streak = resp.streak;
         freePracticeUnlocked = resp.free_practice_unlocked;
+        why = resp.why ?? null;
         isDev = resp.is_dev;
+    }
+
+    // Per-node completed score → color + a short qualifier ("best today"/"shaky").
+    function scoreFrac(b: RoadmapBlock): number {
+        return b.score && b.score.total ? b.score.correct / b.score.total : 0;
+    }
+    function scoreColor(b: RoadmapBlock): string {
+        const f = scoreFrac(b);
+        if (f < 0.7) {
+            return "var(--mcat-red)";
+        }
+        if (f < 0.85) {
+            return "var(--mcat-amber)";
+        }
+        return "var(--mcat-green)";
+    }
+    function bestScored(blocks: RoadmapBlock[]): string | null {
+        let best: { id: string; f: number } | null = null;
+        for (const b of blocks) {
+            if (b.completed && b.score && b.score.total) {
+                const f = b.score.correct / b.score.total;
+                if (!best || f > best.f) {
+                    best = { id: b.id, f };
+                }
+            }
+        }
+        return best && best.f >= 0.8 ? best.id : null;
+    }
+    $: bestBlockId = plan ? bestScored(plan.blocks) : null;
+    function scoreSuffix(b: RoadmapBlock): string {
+        const f = scoreFrac(b);
+        if (b.id === bestBlockId && f >= 0.8) {
+            return " · best today";
+        }
+        if (f < 0.7) {
+            return " · shaky";
+        }
+        return "";
+    }
+    function whyTone(p: number): string {
+        if (p < 70) {
+            return "var(--mcat-red)";
+        }
+        if (p < 85) {
+            return "var(--mcat-amber)";
+        }
+        return "var(--mcat-green)";
     }
 
     async function load(): Promise<void> {
@@ -286,19 +336,75 @@ streak node. Auto-scrolls to your current node.
                         {:else if st === "locked"}
                             <Icon name="lock" size={24} />
                         {:else}
-                            <Icon name={m.icon} size={30} />
+                            <Icon name={m.icon} size={st === "active" ? 44 : 30} />
                         {/if}
                     </button>
                     <div class="below">
                         <div class="node-label">{block.label}</div>
                         <div class="node-sub">{blockSub(block)}</div>
-                        <div class="node-time">{block.minutes} Min</div>
+                        {#if st === "done" && block.score}
+                            <div class="node-score" style={`--c:${scoreColor(block)}`}>
+                                {block.score.correct}/{block.score.total}{scoreSuffix(
+                                    block,
+                                )}
+                            </div>
+                        {:else}
+                            <div class="node-time">{block.minutes} Min</div>
+                        {/if}
                         {#if isDev && st === "active"}
                             <button class="dev-btn" on:click={() => openDev(block)}>
                                 ⚙ Mark done
                             </button>
                         {/if}
                     </div>
+                    {#if st === "active" && why}
+                        <div class="why-card {posX(i) < 50 ? 'right' : 'left'}">
+                            <div class="why-kicker">Why this, now</div>
+                            <div class="why-title-row">
+                                <span class="why-ic" style={`--c:${m.color}`}>
+                                    <Icon name={m.icon} size={14} />
+                                </span>
+                                <span class="why-title">{why.title}</span>
+                            </div>
+                            {#if why.current_pct != null}
+                                <div class="why-bar">
+                                    <div class="why-track">
+                                        <div
+                                            class="why-fill"
+                                            style={`width:${why.current_pct}%;background:${whyTone(
+                                                why.current_pct,
+                                            )}`}
+                                        ></div>
+                                        {#if why.target_pct != null}
+                                            <div
+                                                class="why-tick"
+                                                style={`left:${why.target_pct}%`}
+                                            ></div>
+                                        {/if}
+                                    </div>
+                                    <div class="why-nums">
+                                        <span
+                                            style={`color:${whyTone(why.current_pct)}`}
+                                        >
+                                            {why.current_pct}% now
+                                        </span>
+                                        {#if why.target_pct != null}
+                                            <span class="why-target">
+                                                → ~{why.target_pct}%
+                                            </span>
+                                        {/if}
+                                    </div>
+                                </div>
+                            {:else}
+                                <div class="why-nomeasure">
+                                    Not measured yet — this set starts your estimate.
+                                </div>
+                            {/if}
+                            {#if why.fact}
+                                <div class="why-fact">{why.fact}</div>
+                            {/if}
+                        </div>
+                    {/if}
                 </div>
             {/each}
 
@@ -560,6 +666,18 @@ streak node. Auto-scrolls to your current node.
         box-shadow: 0 0 0 8px color-mix(in srgb, var(--c) 16%, transparent);
         animation: pulse 1.8s ease-in-out infinite;
     }
+    /* The current node is the focus of the screen, so it's noticeably bigger.
+       translate(-50%,-50%) keeps it centred on the same point as the connectors. */
+    .node.active {
+        width: 120px;
+        height: 120px;
+        /* Above neighbouring nodes so the side "Why" card is never clipped. */
+        z-index: 5;
+    }
+    .node.active .bubble {
+        width: 120px;
+        height: 120px;
+    }
     .node.locked .bubble {
         background: var(--mcat-surface-2);
         color: var(--mcat-muted);
@@ -713,5 +831,152 @@ streak node. Auto-scrolls to your current node.
         justify-content: flex-end;
         gap: 10px;
         margin-top: 18px;
+    }
+    /* Completed-node score tally (green/amber/red by how it went). */
+    .node-score {
+        display: inline-block;
+        margin-top: 6px;
+        font-size: 13.5px;
+        font-weight: 800;
+        color: var(--c);
+        white-space: nowrap;
+    }
+    /* "Why this, now" card beside the current node, explaining the pick. */
+    .why-card {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 250px;
+        background: var(--mcat-surface);
+        border: 1px solid var(--mcat-border);
+        border-radius: 16px;
+        box-shadow: var(--mcat-shadow);
+        padding: 15px 16px;
+        text-align: left;
+        z-index: 4;
+        animation: whyIn 0.4s ease 0.25s backwards;
+    }
+    .why-card.right {
+        left: 100%;
+        margin-left: 24px;
+    }
+    .why-card.left {
+        right: 100%;
+        margin-right: 24px;
+    }
+    @keyframes whyIn {
+        from {
+            opacity: 0;
+            transform: translateY(-50%) scale(0.94);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(-50%) scale(1);
+        }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .why-card {
+            animation: none;
+        }
+    }
+    .why-kicker {
+        font-size: 10.5px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--mcat-muted);
+        margin-bottom: 9px;
+    }
+    .why-title-row {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        margin-bottom: 13px;
+    }
+    .why-ic {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        width: 26px;
+        height: 26px;
+        border-radius: 8px;
+        color: #fff;
+        background: var(--c);
+    }
+    .why-title {
+        font-size: 15.5px;
+        font-weight: 800;
+        line-height: 1.2;
+    }
+    .why-bar {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+    }
+    .why-track {
+        position: relative;
+        height: 9px;
+        border-radius: 999px;
+        background: var(--mcat-surface-2);
+        border: 1px solid var(--mcat-border);
+    }
+    .why-fill {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        border-radius: 999px;
+        animation: whyGrow 0.7s cubic-bezier(0.2, 0.8, 0.3, 1) 0.35s backwards;
+    }
+    @keyframes whyGrow {
+        from {
+            width: 0 !important;
+        }
+    }
+    .why-tick {
+        position: absolute;
+        top: -3px;
+        width: 3px;
+        height: 15px;
+        border-radius: 2px;
+        background: var(--mcat-accent);
+        transform: translateX(-50%);
+    }
+    .why-nums {
+        display: flex;
+        justify-content: space-between;
+        font-size: 12.5px;
+        font-weight: 700;
+    }
+    .why-target {
+        color: var(--mcat-accent);
+    }
+    .why-nomeasure {
+        font-size: 12.5px;
+        font-weight: 600;
+        color: var(--mcat-muted);
+        line-height: 1.4;
+    }
+    .why-fact {
+        margin-top: 13px;
+        padding-top: 11px;
+        border-top: 1px solid var(--mcat-border);
+        font-size: 12.5px;
+        font-weight: 600;
+        color: var(--mcat-muted);
+        line-height: 1.4;
+    }
+    /* On a narrow webview the side card would overflow — drop it below instead. */
+    @media (max-width: 720px) {
+        .why-card,
+        .why-card.left,
+        .why-card.right {
+            position: static;
+            transform: none;
+            width: 100%;
+            max-width: 260px;
+            margin: 14px auto 0;
+        }
     }
 </style>

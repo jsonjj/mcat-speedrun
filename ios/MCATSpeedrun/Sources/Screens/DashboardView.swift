@@ -317,6 +317,19 @@ struct DashboardView: View {
 
     // MARK: - Score estimate
 
+    /// Total = sum of the four section ranges once all four have an estimate —
+    /// identical to how the Full Breakdown computes it, so the dashboard and the
+    /// breakdown always show the same number (independent of the stricter overall
+    /// readiness gate, which can abstain even when every section is estimated).
+    private var totalRange: (low: Int, high: Int)? {
+        let sections = model.sections
+        let ready = sections.filter { !$0.abstained }
+        guard sections.count == 4, ready.count == 4 else { return nil }
+        let low = ready.reduce(0) { $0 + Int($1.low.rounded()) }
+        let high = ready.reduce(0) { $0 + Int($1.high.rounded()) }
+        return (low, high)
+    }
+
     private var estimateCard: some View {
         VStack(spacing: 16) {
             HStack {
@@ -324,7 +337,7 @@ struct DashboardView: View {
                     .font(Theme.font(18, .bold))
                     .foregroundStyle(Theme.text)
                 Spacer()
-                Text(model.readiness.abstained ? "—" : "\(model.estLow) – \(model.estHigh)")
+                Text(totalRange.map { "\($0.low) – \($0.high)" } ?? "—")
                     .font(Theme.font(26, .heavy))
                     .foregroundStyle(Theme.accent)
             }
