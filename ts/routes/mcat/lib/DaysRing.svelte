@@ -10,6 +10,7 @@ test day approaches (relative to a ~180-day horizon).
     import { tweened } from "svelte/motion";
 
     export let days: number | null;
+    export let size = 132;
 
     const R = 52;
     const C = 2 * Math.PI * R;
@@ -24,7 +25,7 @@ test day approaches (relative to a ~180-day horizon).
     $: dash = C * $drawn;
 </script>
 
-<div class="ring">
+<div class="ring" style={`--rs:${size}px`}>
     <svg viewBox="0 0 120 120">
         <circle cx="60" cy="60" r={R} class="track" />
         <circle
@@ -45,12 +46,12 @@ test day approaches (relative to a ~180-day horizon).
 <style lang="scss">
     .ring {
         position: relative;
-        width: 132px;
-        height: 132px;
+        width: var(--rs);
+        height: var(--rs);
     }
     svg {
-        width: 132px;
-        height: 132px;
+        width: var(--rs);
+        height: var(--rs);
         display: block;
     }
     .track {
@@ -74,12 +75,12 @@ test day approaches (relative to a ~180-day horizon).
         line-height: 1;
     }
     .num {
-        font-size: 32px;
+        font-size: calc(var(--rs) * 0.24);
         font-weight: 800;
         letter-spacing: -0.02em;
     }
     .lab {
-        font-size: 12px;
+        font-size: calc(var(--rs) * 0.092);
         font-weight: 600;
         color: var(--mcat-muted);
         margin-top: 5px;

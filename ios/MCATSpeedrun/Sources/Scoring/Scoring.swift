@@ -118,6 +118,31 @@ enum Scoring {
         return Trend(recall: r, applied: a, recallDelta: rd, appliedDelta: ad)
     }
 
+    // MARK: - Activity counts (reps / sets, total + this week)
+
+    struct Activity {
+        var reps = 0
+        var sets = 0
+        var repsWeek = 0
+        var attemptsWeek = 0
+    }
+
+    /// Log counts for the score detail pages: total reviews (reps) and attempts
+    /// (sets), plus the last-7-days counts. ts is Unix seconds (see ProgressStore).
+    static func activity(progress: ProgressStore) -> Activity {
+        guard let data = progress.combinedLogJSON().data(using: .utf8),
+            let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return Activity() }
+        let reviews = (obj["reviews"] as? [[String: Any]]) ?? []
+        let attempts = (obj["attempts"] as? [[String: Any]]) ?? []
+        let cutoff = Int(Date().timeIntervalSince1970) - 7 * 86_400
+        func ts(_ d: [String: Any]) -> Int { (d["ts"] as? Int) ?? 0 }
+        return Activity(
+            reps: reviews.count, sets: attempts.count,
+            repsWeek: reviews.filter { ts($0) >= cutoff }.count,
+            attemptsWeek: attempts.filter { ts($0) >= cutoff }.count)
+    }
+
     private static func trendSeries(_ flags: [Bool]) -> ([Double], Int) {
         let n = flags.count
         guard n >= 4 else { return ([], 0) }

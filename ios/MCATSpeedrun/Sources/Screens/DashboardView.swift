@@ -198,45 +198,93 @@ struct DashboardView: View {
         }
     }
 
-    private func bestNextLink(_ kind: ScoreKind) -> some View {
-        let n = bestNext(kind)
-        return NavigationLink { nextDestView(n.dest) } label: {
-            HStack(spacing: 10) {
-                Text("Best next step")
-                    .font(Theme.font(11, .heavy)).tracking(0.4)
-                    .textCase(.uppercase).foregroundStyle(Theme.muted)
-                Spacer(minLength: 0)
-                Text(n.label).font(Theme.font(14, .bold)).foregroundStyle(Theme.accent)
-                    .lineLimit(1).minimumScaleFactor(0.8)
-                Image(systemName: "arrow.right").font(Theme.font(12, .bold))
-                    .foregroundStyle(Theme.accent)
-            }
-            .padding(.horizontal, 14).padding(.vertical, 11)
-            .background(RoundedRectangle(cornerRadius: 12).fill(Theme.surface))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12).stroke(Theme.border, lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-        .tapSound()
-    }
-
-    // MARK: - Score card + its best-next link
+    // MARK: - Score card with its best-next step inside the same tinted box
 
     private func scoreBlock(
         title: String, icon: String, block: ScoreBlock,
         scaleMin: Double, scaleMax: Double, kind: ScoreKind
     ) -> some View {
-        VStack(spacing: 8) {
+        let n = bestNext(kind)
+        let tint = block.tone.color
+        return VStack(spacing: 0) {
             NavigationLink {
                 ScoreDetailView(kind: kind)
             } label: {
-                EvidenceCardView(
+                cardContent(
                     title: title, icon: icon, block: block,
                     scaleMin: scaleMin, scaleMax: scaleMax)
+                .padding(18)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .tapSound()
-            bestNextLink(kind)
+
+            NavigationLink {
+                nextDestView(n.dest)
+            } label: {
+                HStack(spacing: 10) {
+                    Text("Best next step")
+                        .font(Theme.font(11, .heavy)).tracking(0.4)
+                        .textCase(.uppercase).foregroundStyle(Theme.muted)
+                    Spacer(minLength: 0)
+                    Text(n.label).font(Theme.font(15, .heavy)).foregroundStyle(tint)
+                        .lineLimit(1).minimumScaleFactor(0.8)
+                    Image(systemName: "arrow.right").font(Theme.font(13, .bold))
+                        .foregroundStyle(tint)
+                }
+                .padding(.horizontal, 18).padding(.vertical, 13)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(tint.opacity(0.06))
+                .overlay(alignment: .top) {
+                    Rectangle().fill(tint.opacity(0.26)).frame(height: 1)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .tapSound()
+        }
+        .background {
+            ZStack {
+                RoundedRectangle(cornerRadius: Theme.radius).fill(Theme.surface)
+                RoundedRectangle(cornerRadius: Theme.radius).fill(tint.opacity(0.10))
+            }
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.radius)
+                .stroke(tint.opacity(0.24), lineWidth: 1)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radius))
+    }
+
+    @ViewBuilder
+    private func cardContent(
+        title: String, icon: String, block: ScoreBlock,
+        scaleMin: Double, scaleMax: Double
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 9) {
+                Image(systemName: icon).foregroundStyle(block.tone.color)
+                Text(title).font(Theme.font(17, .bold)).foregroundStyle(Theme.text)
+                Spacer()
+                if block.isPercent, !block.abstained, let p = block.point {
+                    CountUpText(
+                        value: p, suffix: "%", font: Theme.font(30, .heavy),
+                        color: block.tone.color)
+                } else {
+                    Text(block.display).font(Theme.font(30, .heavy))
+                        .foregroundStyle(block.tone.color)
+                }
+            }
+            RangeBarView(
+                lo: scaleMin, hi: scaleMax,
+                low: block.low ?? scaleMin, high: block.high ?? scaleMin,
+                point: block.point ?? scaleMin, color: block.tone.color)
+            HStack(spacing: 6) {
+                Circle().fill(block.tone.color).frame(width: 7, height: 7)
+                Text(block.abstained ? "Not enough evidence yet" : block.tone.label)
+                    .font(Theme.font(13, .semibold)).foregroundStyle(block.tone.color)
+            }
         }
     }
 

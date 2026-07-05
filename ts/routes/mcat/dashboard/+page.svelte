@@ -177,68 +177,34 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     {:else if data.scores}
         <div class="grid">
             <section class="evcards">
-                <div class="ev-wrap">
-                    <EvidenceCard
-                        id="memory"
-                        title="Memory Recall"
-                        icon="brain"
-                        block={data.scores.memory}
-                    />
-                    {#if nextSteps}
-                        <button
-                            class="nextlink"
-                            on:click={() => goto(nextSteps.memory.href)}
-                        >
-                            <span class="nextlink-lab">Best next step</span>
-                            <span class="nextlink-val">{nextSteps.memory.label} →</span>
-                        </button>
-                    {/if}
-                </div>
-                <div class="ev-wrap">
-                    <EvidenceCard
-                        id="performance"
-                        title="Applied Under Exam Conditions"
-                        icon="target"
-                        block={data.scores.performance}
-                    />
-                    {#if nextSteps}
-                        <button
-                            class="nextlink"
-                            on:click={() => goto(nextSteps.performance.href)}
-                        >
-                            <span class="nextlink-lab">Best next step</span>
-                            <span class="nextlink-val">
-                                {nextSteps.performance.label} →
-                            </span>
-                        </button>
-                    {/if}
-                </div>
-                <div class="ev-wrap">
-                    <EvidenceCard
-                        id="readiness"
-                        title="Overall Readiness"
-                        icon="gauge"
-                        block={data.scores.readiness}
-                        scaleMin={472}
-                        scaleMax={528}
-                    />
-                    {#if nextSteps}
-                        <button
-                            class="nextlink"
-                            on:click={() => goto(nextSteps.readiness.href)}
-                        >
-                            <span class="nextlink-lab">Best next step</span>
-                            <span class="nextlink-val">
-                                {nextSteps.readiness.label} →
-                            </span>
-                        </button>
-                    {/if}
-                </div>
+                <EvidenceCard
+                    id="memory"
+                    title="Memory Recall"
+                    icon="brain"
+                    block={data.scores.memory}
+                    next={nextSteps?.memory ?? null}
+                />
+                <EvidenceCard
+                    id="performance"
+                    title="Applied Under Exam Conditions"
+                    icon="target"
+                    block={data.scores.performance}
+                    next={nextSteps?.performance ?? null}
+                />
+                <EvidenceCard
+                    id="readiness"
+                    title="Overall Readiness"
+                    icon="gauge"
+                    block={data.scores.readiness}
+                    scaleMin={472}
+                    scaleMax={528}
+                    next={nextSteps?.readiness ?? null}
+                />
             </section>
 
             <div class="rightcol">
                 <div class="ring-wrap">
-                    <DaysRing {days} />
+                    <DaysRing {days} size={196} />
                     {#if data.streak.count > 0}
                         <div class="streak">🔥 {data.streak.count}-day streak</div>
                     {/if}
@@ -412,10 +378,10 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     .grid {
         display: grid;
         grid-template-columns: 1.05fr 0.95fr;
-        gap: 18px;
-        align-items: center;
-        /* Fill the viewport so the page isn't top-stacked with blank below. */
-        min-height: calc(100dvh - 190px);
+        gap: 20px;
+        align-items: stretch;
+        /* Fill the viewport (columns spread to fill) with no mid-page gap. */
+        min-height: calc(100dvh - 208px);
     }
     @media (max-width: 900px) {
         .grid {
@@ -427,11 +393,13 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     .evcards {
         display: flex;
         flex-direction: column;
-        gap: 14px;
+        justify-content: space-between;
+        gap: 16px;
     }
     .rightcol {
         display: flex;
         flex-direction: column;
+        justify-content: space-between;
         gap: 16px;
     }
     .ring-wrap {
@@ -523,46 +491,5 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         font-size: 14px;
         font-weight: 700;
         color: var(--mcat-accent);
-    }
-    /* Each score card stacks with a small "best next step" link below it. */
-    .ev-wrap {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-    }
-    .nextlink {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        width: 100%;
-        appearance: none;
-        cursor: pointer;
-        text-align: left;
-        background: var(--mcat-surface);
-        border: 1px solid var(--mcat-border);
-        border-radius: 12px;
-        padding: 10px 14px;
-        transition:
-            border-color 0.12s ease,
-            transform 0.1s ease;
-    }
-    .nextlink:hover {
-        border-color: color-mix(in srgb, var(--mcat-accent) 45%, var(--mcat-border));
-        transform: translateY(-1px);
-    }
-    .nextlink-lab {
-        font-size: 12px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        color: var(--mcat-muted);
-        white-space: nowrap;
-    }
-    .nextlink-val {
-        font-size: 14.5px;
-        font-weight: 800;
-        color: var(--mcat-accent);
-        text-align: right;
     }
 </style>

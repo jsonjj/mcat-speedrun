@@ -22,6 +22,9 @@ matching score detail page.
     export let block: ScoreBlock;
     export let scaleMin = 0;
     export let scaleMax = 100;
+    // Optional "best next step" for this score, rendered inside the same tinted
+    // box so it reads as this score's recommended action.
+    export let next: { label: string; href: string } | null = null;
 
     $: ev = evidence(block);
     $: color = toneVar(ev.tone);
@@ -51,56 +54,60 @@ matching score detail page.
     $: barPoint = block.abstained ? scaleMin : (block.point ?? scaleMin);
 </script>
 
-<button
-    class="ev"
-    style={`--ev:${color}`}
-    on:click={() => goto(`/mcat/score?id=${id}`)}
->
-    <div class="top">
-        <div class="left">
-            <span class="ic"><Icon name={icon} size={20} /></span>
-            <span class="title">{title}</span>
+<div class="ev" style={`--ev:${color}`}>
+    <button class="ev-main" on:click={() => goto(`/mcat/score?id=${id}`)}>
+        <div class="top">
+            <div class="left">
+                <span class="ic"><Icon name={icon} size={22} /></span>
+                <span class="title">{title}</span>
+            </div>
+            <div class="value">{value}</div>
         </div>
-        <div class="value">{value}</div>
-    </div>
 
-    <RangeBar
-        min={scaleMin}
-        max={scaleMax}
-        low={barLow}
-        high={barHigh}
-        point={barPoint}
-        {color}
-    />
+        <RangeBar
+            min={scaleMin}
+            max={scaleMax}
+            low={barLow}
+            high={barHigh}
+            point={barPoint}
+            {color}
+        />
 
-    <div class="foot">
-        {#if block.abstained}
-            <span class="abstain">
-                Abstaining — {block.missing ?? "not enough evidence"}
-            </span>
-        {:else}
-            <span class="dot"></span>
-            <strong>{ev.label}</strong>
-            {#if block.count != null}
-                <span class="count">· {block.count} {block.count_unit}</span>
+        <div class="foot">
+            {#if block.abstained}
+                <span class="abstain">
+                    Abstaining — {block.missing ?? "not enough evidence"}
+                </span>
+            {:else}
+                <span class="dot"></span>
+                <strong>{ev.label}</strong>
+                {#if block.count != null}
+                    <span class="count">· {block.count} {block.count_unit}</span>
+                {/if}
             {/if}
-        {/if}
-    </div>
-</button>
+        </div>
+    </button>
+
+    {#if next}
+        <a class="ev-next" href={next.href}>
+            <span class="ev-next-lab">Best next step</span>
+            <span class="ev-next-val">
+                {next.label}
+                <Icon name="arrow" size={17} />
+            </span>
+        </a>
+    {/if}
+</div>
 
 <style lang="scss">
     .ev {
-        appearance: none;
-        text-align: left;
-        cursor: pointer;
         width: 100%;
         display: flex;
         flex-direction: column;
-        gap: 12px;
+        overflow: hidden;
         background: color-mix(in srgb, var(--ev) 9%, var(--mcat-surface));
         border: 1px solid color-mix(in srgb, var(--ev) 24%, var(--mcat-border));
         border-radius: var(--mcat-radius);
-        padding: 18px 20px;
         box-shadow: var(--mcat-shadow);
         transition:
             transform 0.1s ease,
@@ -108,8 +115,51 @@ matching score detail page.
     }
     .ev:hover {
         transform: translateY(-2px);
-        background: color-mix(in srgb, var(--ev) 15%, var(--mcat-surface));
         box-shadow: 0 14px 32px -14px color-mix(in srgb, var(--ev) 55%, transparent);
+    }
+    .ev-main {
+        appearance: none;
+        text-align: left;
+        cursor: pointer;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        background: transparent;
+        border: none;
+        padding: 22px 24px;
+    }
+    /* The recommended action, inside the same tinted box (divider above). */
+    .ev-next {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        text-decoration: none;
+        padding: 14px 24px;
+        border-top: 1px solid color-mix(in srgb, var(--ev) 26%, var(--mcat-border));
+        background: color-mix(in srgb, var(--ev) 6%, transparent);
+        transition: background 0.12s ease;
+    }
+    .ev-next:hover {
+        background: color-mix(in srgb, var(--ev) 16%, transparent);
+    }
+    .ev-next-lab {
+        font-size: 12px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--mcat-muted);
+        white-space: nowrap;
+    }
+    .ev-next-val {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 15.5px;
+        font-weight: 800;
+        color: var(--ev);
+        text-align: right;
     }
     .top {
         display: flex;
@@ -128,11 +178,11 @@ matching score detail page.
     }
     .title {
         font-weight: 700;
-        font-size: 17px;
+        font-size: 18px;
         color: var(--mcat-text);
     }
     .value {
-        font-size: 32px;
+        font-size: 40px;
         font-weight: 800;
         letter-spacing: -0.02em;
         color: var(--ev);
