@@ -1,8 +1,9 @@
 // Copyright: Ankitects Pty Ltd and contributors
 // License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 //
-// Dashboard tab: the three evidence-first scores, a days-to-exam ring, and a
-// compact score-estimate card that links through to the full breakdown.
+// Dashboard (home): a big adaptive "what to do next" CTA, the three evidence
+// scores — each with a small "best next step" link to the exact targeted
+// practice — a days-to-exam ring, and the score-estimate card.
 
 import SwiftUI
 
@@ -12,7 +13,6 @@ struct DashboardView: View {
 
     @State private var showMastery = false
     @State private var draft: Double = 80
-    @State private var infoKind: ScoreKind?
 
     private var model: DashboardModel { Scoring.model(app: app, progress: progress) }
 
@@ -23,25 +23,23 @@ struct DashboardView: View {
 
                 togglesRow
                 if app.isDev { devMasteryButton }
-                if !app.diagnosticDone { diagnosticPrompt }
+
+                ctaLink
 
                 ringSection
 
-                scoreCard(title: "Memory Recall",
-                          icon: ScoreKind.memory.icon,
-                          block: model.memory,
-                          scaleMin: 0, scaleMax: 100,
-                          kind: .memory)
-                scoreCard(title: "Applied Under Exam Conditions",
-                          icon: ScoreKind.performance.icon,
-                          block: model.performance,
-                          scaleMin: 0, scaleMax: 100,
-                          kind: .performance)
-                scoreCard(title: "Overall Readiness",
-                          icon: ScoreKind.readiness.icon,
-                          block: model.readiness,
-                          scaleMin: 472, scaleMax: 528,
-                          kind: .readiness)
+                scoreBlock(
+                    title: "Memory Recall", icon: ScoreKind.memory.icon,
+                    block: model.memory, scaleMin: 0, scaleMax: 100, kind: .memory)
+                scoreBlock(
+                    title: "Applied Under Exam Conditions",
+                    icon: ScoreKind.performance.icon,
+                    block: model.performance, scaleMin: 0, scaleMax: 100,
+                    kind: .performance)
+                scoreBlock(
+                    title: "Overall Readiness", icon: ScoreKind.readiness.icon,
+                    block: model.readiness, scaleMin: 472, scaleMax: 528,
+                    kind: .readiness)
 
                 estimateCard
             }
@@ -52,123 +50,193 @@ struct DashboardView: View {
         .sheet(isPresented: $showMastery) { masterySheet }
     }
 
-    // MARK: - Score badges (Weakest / Strongest / Not enough data)
+    // MARK: - The big adaptive "what to do next" CTA
 
-    private struct Badge {
-        enum Kind { case weakest, strongest, nodata }
-        var kind: Kind
-        var label: String
-        var text: String
+    private struct Cta {
+        var eyebrow: String
+        var title: String
+        var sub: String
+        var icon: String
+        var progress: Double?
+        var green: Bool
     }
 
-    private func toneRank(_ b: ScoreBlock) -> Int {
-        switch b.tone {
-        case .green: return 2
-        case .amber: return 1
-        case .red: return 0
+    private var cta: Cta {
+        if !app.diagnosticDone {
+            return Cta(
+                eyebrow: "Start here", title: "Take your diagnostic",
+                sub: "A quick placement test seeds your three scores.",
+                icon: "target", progress: nil, green: false)
         }
+        if app.allDone {
+            return Cta(
+                eyebrow: "Today's path is done", title: "Do Extra Practice",
+                sub: "Sharpen your weak areas with targeted sets.",
+                icon: "sparkles", progress: nil, green: true)
+        }
+        let total = app.total
+        let done = app.doneCount
+        return Cta(
+            eyebrow: "Start here",
+            title: done > 0 ? "Continue Today's Path" : "Start Today's Path",
+            sub: total > 0
+                ? "\(done) of \(total) blocks done · unlocks Extra Practice"
+                : "Your guided plan for today.",
+            icon: "target",
+            progress: total > 0 ? Double(done) / Double(total) : nil,
+            green: false)
     }
 
-    /// Highlight the weakest/strongest score by evidence strength (matching the
-    /// card colors), plus "Not enough data" on abstained ones. The popups name
-    /// the subjects behind the decision (strongest) or the specific practice to
-    /// do next (weakest). No AI — computed straight from the scores.
-    private var badges: [ScoreKind: Badge] {
-        var out: [ScoreKind: Badge] = [:]
-        let m = model
-        if m.readiness.abstained {
-            out[.readiness] = Badge(
-                kind: .nodata, label: "Not enough data",
-                text: "Not enough reviews yet to project a score.")
-        }
-        var measurable: [(ScoreKind, Int, Double)] = []
-        if m.memory.abstained {
-            out[.memory] = Badge(
-                kind: .nodata, label: "Not enough data",
-                text: "Do some flashcards to measure recall.")
+    @ViewBuilder private var ctaDestination: some View {
+        if !app.diagnosticDone {
+            DiagnosticView()
+        } else if app.allDone {
+            ExtraPracticeView()
         } else {
-            measurable.append((.memory, toneRank(m.memory), m.memory.point ?? 0))
-        }
-        if m.performance.abstained {
-            out[.performance] = Badge(
-                kind: .nodata, label: "Not enough data",
-                text: "Do a question set to measure applied accuracy.")
-        } else {
-            measurable.append((.performance, toneRank(m.performance), m.performance.point ?? 0))
-        }
-        if measurable.count == 2 {
-            measurable.sort { ($0.1, $0.2) < ($1.1, $1.2) }
-            out[measurable[1].0] = strongestBadge(measurable[1].0)
-            out[measurable[0].0] = weakestBadge(measurable[0].0)
-        }
-        return out
-    }
-
-    private func measure(for kind: ScoreKind) -> Scoring.Measure {
-        kind == .memory ? .memory : .performance
-    }
-
-    private func strongestBadge(_ kind: ScoreKind) -> Badge {
-        let ranked = Scoring.sectionsRanked(
-            app: app, progress: progress, measure: measure(for: kind))
-        let top = ranked.suffix(2).reversed().map { $0.code.word }
-        let text = top.isEmpty
-            ? "Your strongest area so far."
-            : "Strongest: " + top.joined(separator: ", ") + "."
-        return Badge(kind: .strongest, label: "Strongest", text: text)
-    }
-
-    private func weakestBadge(_ kind: ScoreKind) -> Badge {
-        let ranked = Scoring.sectionsRanked(
-            app: app, progress: progress, measure: measure(for: kind))
-        guard let weak = ranked.first else {
-            return Badge(
-                kind: .weakest, label: "Weakest",
-                text: "Your weakest area — study here next.")
-        }
-        let name = weak.code.word
-        let practice = kind == .memory ? "\(name) flashcards" : "\(name) problems"
-        let text = app.allDone
-            ? "Weakest: \(name). Practice \(practice) next."
-            : "Weakest: \(name). Finish today's path to unlock practice."
-        return Badge(kind: .weakest, label: "Weakest", text: text)
-    }
-
-    private func badgeColor(_ k: Badge.Kind) -> Color {
-        switch k {
-        case .weakest: return Theme.red
-        case .strongest: return Theme.green
-        case .nodata: return Theme.muted
+            RoadmapView()
         }
     }
 
-    private func infoBinding(_ k: ScoreKind) -> Binding<Bool> {
-        Binding(get: { infoKind == k }, set: { infoKind = $0 ? k : nil })
-    }
-
-    @ViewBuilder
-    private func badgeView(_ kind: ScoreKind) -> some View {
-        if let b = badges[kind] {
-            Button { infoKind = kind } label: {
-                HStack(spacing: 5) {
-                    Text(b.label).font(Theme.font(11, .heavy))
-                    Image(systemName: "info.circle.fill").font(.system(size: 11))
+    private var ctaLink: some View {
+        let c = cta
+        let base = c.green ? Theme.green : Theme.accent
+        return NavigationLink { ctaDestination } label: {
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.2))
+                    Image(systemName: c.icon).font(Theme.font(22, .bold))
+                        .foregroundStyle(.white)
                 }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 10).padding(.vertical, 4)
-                .background(Capsule().fill(badgeColor(b.kind)))
-                .shadow(color: .black.opacity(0.18), radius: 4, y: 2)
+                .frame(width: 48, height: 48)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(c.eyebrow.uppercased())
+                        .font(Theme.font(11, .heavy)).tracking(0.5)
+                        .foregroundStyle(.white.opacity(0.9))
+                    Text(c.title).font(Theme.font(21, .heavy)).foregroundStyle(.white)
+                    Text(c.sub).font(Theme.font(13, .semibold))
+                        .foregroundStyle(.white.opacity(0.92))
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let p = c.progress {
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(Color.white.opacity(0.28))
+                                Capsule().fill(.white)
+                                    .frame(width: max(6, geo.size.width * p))
+                            }
+                        }
+                        .frame(height: 7).padding(.top, 6)
+                    }
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "arrow.right").font(Theme.font(18, .bold))
+                    .foregroundStyle(.white.opacity(0.9))
+            }
+            .padding(18)
+            .background(
+                RoundedRectangle(cornerRadius: 18)
+                    .fill(
+                        LinearGradient(
+                            colors: [base, base.opacity(0.82)],
+                            startPoint: .topLeading, endPoint: .bottomTrailing)))
+        }
+        .buttonStyle(.plain)
+        .tapSound()
+    }
+
+    // MARK: - Best next step per score (mirrors the desktop dashboard)
+
+    private enum NextDest {
+        case flashcards([SectionCode])
+        case questions(QuizConfig)
+        case breakdown
+    }
+
+    private func bestNext(_ kind: ScoreKind) -> (label: String, dest: NextDest) {
+        func set(_ code: SectionCode) -> QuizConfig {
+            QuizConfig(
+                title: "\(code.word) Set", sections: [code], count: 10, seconds: 120)
+        }
+        switch kind {
+        case .memory:
+            if let w = Scoring.sectionsRanked(app: app, progress: progress, measure: .memory)
+                .first
+            {
+                return ("\(w.code.word) flashcards", .flashcards([w.code]))
+            }
+            return ("Start a memory block", .flashcards([.bb, .cp, .ps]))
+        case .performance:
+            if let w = Scoring.sectionsRanked(
+                app: app, progress: progress, measure: .performance
+            ).first {
+                return ("Timed set — \(w.code.word)", .questions(set(w.code)))
+            }
+            return (
+                "Do a question set",
+                .questions(
+                    QuizConfig(
+                        title: "Mini-MCAT", sections: [.bb, .cp, .ps, .cars], count: 12,
+                        seconds: 120))
+            )
+        case .readiness:
+            if model.readiness.abstained {
+                return ("Do a review set", .flashcards([.bb, .cp, .ps]))
+            }
+            if let w = Scoring.sectionsRanked(
+                app: app, progress: progress, measure: .performance
+            ).first {
+                return ("Sharpen \(w.code.word)", .questions(set(w.code)))
+            }
+            return ("See full breakdown", .breakdown)
+        }
+    }
+
+    @ViewBuilder private func nextDestView(_ dest: NextDest) -> some View {
+        switch dest {
+        case .flashcards(let s): FlashcardsView(sections: s)
+        case .questions(let c): QuestionRunnerView(config: c)
+        case .breakdown: BreakdownView()
+        }
+    }
+
+    private func bestNextLink(_ kind: ScoreKind) -> some View {
+        let n = bestNext(kind)
+        return NavigationLink { nextDestView(n.dest) } label: {
+            HStack(spacing: 10) {
+                Text("Best next step")
+                    .font(Theme.font(11, .heavy)).tracking(0.4)
+                    .textCase(.uppercase).foregroundStyle(Theme.muted)
+                Spacer(minLength: 0)
+                Text(n.label).font(Theme.font(14, .bold)).foregroundStyle(Theme.accent)
+                    .lineLimit(1).minimumScaleFactor(0.8)
+                Image(systemName: "arrow.right").font(Theme.font(12, .bold))
+                    .foregroundStyle(Theme.accent)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 11)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Theme.surface))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12).stroke(Theme.border, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .tapSound()
+    }
+
+    // MARK: - Score card + its best-next link
+
+    private func scoreBlock(
+        title: String, icon: String, block: ScoreBlock,
+        scaleMin: Double, scaleMax: Double, kind: ScoreKind
+    ) -> some View {
+        VStack(spacing: 8) {
+            NavigationLink {
+                ScoreDetailView(kind: kind)
+            } label: {
+                EvidenceCardView(
+                    title: title, icon: icon, block: block,
+                    scaleMin: scaleMin, scaleMax: scaleMax)
             }
             .buttonStyle(.plain)
-            .offset(x: 12, y: -10)
-            .popover(isPresented: infoBinding(kind)) {
-                Text(b.text)
-                    .font(Theme.font(14, .semibold))
-                    .foregroundStyle(Theme.text)
-                    .padding(14)
-                    .frame(width: 240)
-                    .presentationCompactAdaptation(.popover)
-            }
+            .tapSound()
+            bestNextLink(kind)
         }
     }
 
@@ -179,14 +247,10 @@ struct DashboardView: View {
             Spacer()
             ToggleChip(
                 icon: app.soundOn ? "speaker.wave.2.fill" : "speaker.slash.fill",
-                label: "Sound",
-                isOn: $app.soundOn
-            )
+                label: "Sound", isOn: $app.soundOn)
             ToggleChip(
                 icon: app.darkMode ? "moon.fill" : "sun.max.fill",
-                label: "Dark Mode",
-                isOn: $app.darkMode
-            )
+                label: "Dark Mode", isOn: $app.darkMode)
         }
     }
 
@@ -208,28 +272,19 @@ struct DashboardView: View {
         VStack(spacing: 20) {
             VStack(spacing: 4) {
                 Text("Set Mastery")
-                    .font(Theme.font(20, .heavy))
-                    .foregroundStyle(Theme.text)
+                    .font(Theme.font(20, .heavy)).foregroundStyle(Theme.text)
                 Text("Overrides the Memory & Performance scores.")
-                    .font(Theme.font(14, .semibold))
-                    .foregroundStyle(Theme.muted)
+                    .font(Theme.font(14, .semibold)).foregroundStyle(Theme.muted)
                     .multilineTextAlignment(.center)
             }
-
-            Text("\(Int(draft))%")
-                .font(Theme.font(46, .heavy))
-                .foregroundStyle(Theme.accent)
-
-            Slider(value: $draft, in: 0...100)
-                .tint(Theme.accent)
-
+            Text("\(Int(draft))%").font(Theme.font(46, .heavy)).foregroundStyle(Theme.accent)
+            Slider(value: $draft, in: 0...100).tint(Theme.accent)
             VStack(spacing: 10) {
                 Button("Apply") {
                     app.devMastery = draft
                     showMastery = false
                 }
                 .buttonStyle(PrimaryButtonStyle())
-
                 Button("Clear override") {
                     app.devMastery = nil
                     showMastery = false
@@ -243,35 +298,6 @@ struct DashboardView: View {
         .presentationDetents([.medium])
     }
 
-    // MARK: - Diagnostic prompt
-
-    private var diagnosticPrompt: some View {
-        NavigationLink {
-            DiagnosticView()
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "target")
-                    .font(Theme.font(20, .bold))
-                    .foregroundStyle(Theme.accent)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Take your placement diagnostic")
-                        .font(Theme.font(16, .bold))
-                        .foregroundStyle(Theme.text)
-                    Text("Seed your scores with a quick mixed set.")
-                        .font(Theme.font(13))
-                        .foregroundStyle(Theme.muted)
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.right")
-                    .font(Theme.font(13, .bold))
-                    .foregroundStyle(Theme.muted)
-            }
-            .cardStyle(tint: Theme.accent)
-        }
-        .buttonStyle(.plain)
-        .tapSound()
-    }
-
     // MARK: - Days ring + streak
 
     private var ringSection: some View {
@@ -282,45 +308,15 @@ struct DashboardView: View {
                     Image(systemName: "flame.fill")
                     Text("\(app.streak)-day streak")
                 }
-                .font(Theme.font(14, .bold))
-                .foregroundStyle(Theme.amber)
+                .font(Theme.font(14, .bold)).foregroundStyle(Theme.amber)
             }
         }
         .frame(maxWidth: .infinity)
     }
 
-    // MARK: - Tappable evidence card
-
-    private func scoreCard(
-        title: String,
-        icon: String,
-        block: ScoreBlock,
-        scaleMin: Double,
-        scaleMax: Double,
-        kind: ScoreKind
-    ) -> some View {
-        NavigationLink {
-            ScoreDetailView(kind: kind)
-        } label: {
-            EvidenceCardView(
-                title: title,
-                icon: icon,
-                block: block,
-                scaleMin: scaleMin,
-                scaleMax: scaleMax
-            )
-        }
-        .buttonStyle(.plain)
-        .tapSound()
-        .overlay(alignment: .topLeading) { badgeView(kind) }
-    }
-
     // MARK: - Score estimate
 
-    /// Total = sum of the four section ranges once all four have an estimate —
-    /// identical to how the Full Breakdown computes it, so the dashboard and the
-    /// breakdown always show the same number (independent of the stricter overall
-    /// readiness gate, which can abstain even when every section is estimated).
+    /// Total = sum of the four section ranges once all four have an estimate.
     private var totalRange: (low: Int, high: Int)? {
         let sections = model.sections
         let ready = sections.filter { !$0.abstained }
@@ -334,36 +330,30 @@ struct DashboardView: View {
         VStack(spacing: 16) {
             HStack {
                 Text("Score Estimate")
-                    .font(Theme.font(18, .bold))
-                    .foregroundStyle(Theme.text)
+                    .font(Theme.font(18, .bold)).foregroundStyle(Theme.text)
                 Spacer()
                 Text(totalRange.map { "\($0.low) – \($0.high)" } ?? "—")
-                    .font(Theme.font(26, .heavy))
-                    .foregroundStyle(Theme.accent)
+                    .font(Theme.font(26, .heavy)).foregroundStyle(Theme.accent)
             }
-
             VStack(spacing: 13) {
                 ForEach(model.sections) { section in
                     HStack(spacing: 12) {
                         Text(section.code.word)
-                            .font(Theme.font(14, .bold))
-                            .foregroundStyle(Theme.text)
+                            .font(Theme.font(14, .bold)).foregroundStyle(Theme.text)
                             .frame(width: 92, alignment: .leading)
                         RangeBarView(
                             lo: 118, hi: 132,
                             low: section.low, high: section.high, point: section.point,
-                            color: section.abstained ? Theme.muted : section.tone.color
+                            color: section.abstained ? Theme.muted : section.tone.color)
+                        Text(
+                            section.abstained
+                                ? "—" : "\(Int(section.low)) – \(Int(section.high))"
                         )
-                        Text(section.abstained
-                             ? "—"
-                             : "\(Int(section.low)) – \(Int(section.high))")
-                            .font(Theme.font(13, .bold))
-                            .foregroundStyle(Theme.muted)
-                            .frame(width: 78, alignment: .trailing)
+                        .font(Theme.font(13, .bold)).foregroundStyle(Theme.muted)
+                        .frame(width: 78, alignment: .trailing)
                     }
                 }
             }
-
             NavigationLink {
                 BreakdownView()
             } label: {
@@ -371,8 +361,7 @@ struct DashboardView: View {
                     Text("See Full Breakdown")
                     Image(systemName: "arrow.right")
                 }
-                .font(Theme.font(14, .bold))
-                .foregroundStyle(Theme.accent)
+                .font(Theme.font(14, .bold)).foregroundStyle(Theme.accent)
                 .frame(maxWidth: .infinity, alignment: .trailing)
             }
             .buttonStyle(.plain)

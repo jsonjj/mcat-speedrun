@@ -14,8 +14,6 @@ struct AccountView: View {
     private let studyOptions = [30, 45, 60, 90, 120, 150, 180]
     private let recommended = 120.0
 
-    private var model: DashboardModel { Scoring.model(app: app, progress: progress) }
-
     private var examDate: Binding<Date> {
         Binding(
             get: {
@@ -42,11 +40,7 @@ struct AccountView: View {
                 sectionLabel("AI features").slideEnter(delay: 0.24, x: -36)
                 aiCard.slideEnter(delay: 0.27, x: 36)
 
-                sectionLabel("Your scores").slideEnter(delay: 0.33, x: -36)
-                scoresList.slideEnter(delay: 0.36, x: 36)
-                estimateCard.slideEnter(delay: 0.42, x: -36)
-
-                footer.screenEnter(delay: 0.48)
+                footer.screenEnter(delay: 0.36)
             }
             .padding(16)
         }
@@ -58,7 +52,7 @@ struct AccountView: View {
 
     private var header: some View {
         HStack(alignment: .top, spacing: 12) {
-            ScreenHeader("Account", "Your profile, commitment, and progress.")
+            ScreenHeader("Account", "Your profile, commitment, and settings.")
             Button { auth.signOut() } label: {
                 Text("Log out").padding(.horizontal, 16)
             }
@@ -239,70 +233,6 @@ struct AccountView: View {
         }
     }
 
-    // MARK: - Scores
-
-    private var scoresList: some View {
-        let t = Scoring.trends(progress: progress)
-        return VStack(spacing: 12) {
-            ForEach(ScoreKind.allCases) { kind in
-                NavigationLink {
-                    ScoreDetailView(kind: kind)
-                } label: {
-                    EvidenceCardView(
-                        title: kind.title,
-                        icon: kind.icon,
-                        block: block(for: kind),
-                        scaleMin: kind == .readiness ? 472 : 0,
-                        scaleMax: kind == .readiness ? 528 : 100,
-                        trend: kind == .memory
-                            ? t.recall : (kind == .performance ? t.applied : []),
-                        delta: kind == .memory
-                            ? t.recallDelta : (kind == .performance ? t.appliedDelta : 0)
-                    )
-                }
-                .buttonStyle(.plain)
-                .tapSound()
-            }
-        }
-    }
-
-    // Total = sum of the four section ranges once all four are estimated (matches
-    // the Dashboard + Breakdown), independent of the overall readiness gate.
-    private var estimateCard: some View {
-        let ready = model.sections.filter { !$0.abstained }
-        let allReady = model.sections.count == 4 && ready.count == 4
-        let low = ready.reduce(0) { $0 + Int($1.low.rounded()) }
-        let high = ready.reduce(0) { $0 + Int($1.high.rounded()) }
-        let mid = (low + high) / 2
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Score estimate")
-                    .font(Theme.font(15, .bold)).foregroundStyle(Theme.text)
-                Spacer()
-                Text(allReady ? "\(low)–\(high)" : "—")
-                    .font(Theme.font(24, .heavy))
-                    .foregroundStyle(allReady ? Theme.accent : Theme.muted)
-            }
-            VStack(spacing: 6) {
-                RangeBarView(
-                    lo: 472, hi: 528,
-                    low: allReady ? Double(low) : 472,
-                    high: allReady ? Double(high) : 472,
-                    point: allReady ? Double(mid) : 472,
-                    color: allReady ? Theme.accent : Theme.muted)
-                HStack {
-                    Text("472")
-                    Spacer()
-                    Text("500")
-                    Spacer()
-                    Text("528")
-                }
-                .font(Theme.font(11, .semibold)).foregroundStyle(Theme.muted)
-            }
-        }
-        .cardStyle(tint: Theme.accent)
-    }
-
     // MARK: - Footer
 
     private var footer: some View {
@@ -341,14 +271,6 @@ struct AccountView: View {
             content().frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func block(for kind: ScoreKind) -> ScoreBlock {
-        switch kind {
-        case .memory: return model.memory
-        case .performance: return model.performance
-        case .readiness: return model.readiness
-        }
     }
 
     private func hrText(_ minutes: Int) -> String {
