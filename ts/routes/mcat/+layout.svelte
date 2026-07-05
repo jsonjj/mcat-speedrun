@@ -24,9 +24,11 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         return () => document.removeEventListener("pointerdown", onPointer, true);
     });
 
+    // Dashboard is home; it carries a big adaptive "what to do next" CTA that
+    // points to Today's Path (or Extra Practice once the path is done).
     const items = [
         { id: "dashboard", label: "Dashboard" },
-        { id: "roadmap", label: "Roadmap" },
+        { id: "roadmap", label: "Today's Path" },
         { id: "extra", label: "Extra Practice" },
         { id: "account", label: "Account" },
     ];

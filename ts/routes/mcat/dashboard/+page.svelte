@@ -7,7 +7,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     import { onMount } from "svelte";
 
     import { postJson } from "../lib/api";
-    import { SECTION_WORD, evidence, toneVar } from "../lib/blocks";
+    import { SECTION_WORD, bestNextStep, evidence, toneVar } from "../lib/blocks";
     import DaysRing from "../lib/DaysRing.svelte";
     import EvidenceCard from "../lib/EvidenceCard.svelte";
     import Icon from "../lib/Icon.svelte";
@@ -15,7 +15,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     import { soundOn } from "../lib/sound";
     import Switch from "../lib/Switch.svelte";
     import { darkMode } from "../lib/theme";
-    import type { DashboardData, Scores, ScoreBlock } from "../lib/types";
+    import type { DashboardData, ScoreBlock } from "../lib/types";
 
     const SECTION_ORDER = ["bb", "cp", "ps", "cars"];
 
@@ -70,152 +70,50 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         : 0;
     $: days = daysUntil(data?.profile.exam_date ?? null);
 
-    // Highlight the weakest / strongest score by evidence strength (matching the
-    // card colors), plus "Not enough data" on abstained ones. Press a badge for a
-    // one-line explanation — no AI, computed straight from the scores.
-    type Measure = "memory" | "performance";
-    type Badge = {
-        kind: "weakest" | "strongest" | "nodata";
-        label: string;
-        text: string;
-        link?: { href: string; label: string };
-    };
+    // The best next step for each score — the SAME target its detail page uses,
+    // so the small link under each card and the detail page always agree.
+    $: nextSteps = data?.scores
+        ? {
+              memory: bestNextStep(data.scores, "memory"),
+              performance: bestNextStep(data.scores, "performance"),
+              readiness: bestNextStep(data.scores, "readiness"),
+          }
+        : null;
 
-    function toneRank(b: ScoreBlock): number {
-        const t = evidence(b).tone;
-        if (t === "green") {
-            return 2;
-        }
-        if (t === "amber") {
-            return 1;
-        }
-        return 0;
-    }
-
-    // Sections ranked (ascending) by a measure, skipping abstained ones.
-    function sectionsByMeasure(
-        s: Scores,
-        measure: Measure,
-    ): { code: string; point: number }[] {
-        const out: { code: string; point: number }[] = [];
-        for (const code of SECTION_ORDER) {
-            const sec = s.sections[code];
-            if (!sec) {
-                continue;
+    // The big adaptive "what to do next" CTA at the top: take the diagnostic if
+    // it was skipped, else finish Today's Path, else move to Extra Practice.
+    $: diagnosticDone = data?.profile.diagnostic_done ?? true;
+    $: unlocked = data?.free_practice_unlocked ?? false;
+    $: rm = data?.roadmap ?? { done: 0, total: 0 };
+    $: doNext = !diagnosticDone
+        ? {
+              eyebrow: "Start here",
+              title: "Take your diagnostic",
+              sub: "A quick placement test seeds your three scores.",
+              href: "/mcat/diagnostic",
+              icon: "target",
+          }
+        : unlocked
+          ? {
+                eyebrow: "Today's path is done ✓",
+                title: "Do Extra Practice",
+                sub: "Sharpen your weak areas with targeted sets.",
+                href: "/mcat/extra",
+                icon: "spark",
             }
-            const b = measure === "memory" ? sec.memory : sec.performance;
-            if (b && !b.abstained && b.point != null) {
-                out.push({ code, point: b.point });
-            }
-        }
-        out.sort((a, b) => a.point - b.point);
-        return out;
-    }
-
-    function practiceHref(measure: Measure, code: string): string {
-        return measure === "memory"
-            ? `/mcat/flashcards?section=${code}`
-            : `/mcat/mini?section=${code}`;
-    }
-
-    function computeBadges(s: Scores | null, unlocked: boolean): Record<string, Badge> {
-        const out: Record<string, Badge> = {};
-        if (!s) {
-            return out;
-        }
-        if (s.readiness.abstained) {
-            out.readiness = {
-                kind: "nodata",
-                label: "Not enough data",
-                text: "Not enough reviews yet to project a score.",
+          : {
+                eyebrow: "Start here",
+                title: rm.done > 0 ? "Continue Today's Path" : "Start Today's Path",
+                sub:
+                    rm.total > 0
+                        ? `${rm.done} of ${rm.total} blocks done · unlocks Extra Practice`
+                        : "Your guided plan for today.",
+                href: "/mcat/roadmap",
+                icon: "target",
             };
-        }
-        const measurable: { id: Measure; rank: number; point: number }[] = [];
-        if (s.memory.abstained) {
-            out.memory = {
-                kind: "nodata",
-                label: "Not enough data",
-                text: "Do some flashcards to measure recall.",
-            };
-        } else {
-            measurable.push({
-                id: "memory",
-                rank: toneRank(s.memory),
-                point: s.memory.point ?? 0,
-            });
-        }
-        if (s.performance.abstained) {
-            out.performance = {
-                kind: "nodata",
-                label: "Not enough data",
-                text: "Do a question set to measure applied accuracy.",
-            };
-        } else {
-            measurable.push({
-                id: "performance",
-                rank: toneRank(s.performance),
-                point: s.performance.point ?? 0,
-            });
-        }
-        if (measurable.length === 2) {
-            measurable.sort((a, b) => a.rank - b.rank || a.point - b.point);
-            const weakId = measurable[0].id;
-            const strongId = measurable[1].id;
-
-            const strong = sectionsByMeasure(s, strongId);
-            const topNames = strong
-                .slice(-2)
-                .reverse()
-                .map((x) => SECTION_WORD[x.code] ?? x.code);
-            out[strongId] = {
-                kind: "strongest",
-                label: "Strongest",
-                text: topNames.length
-                    ? `Strongest: ${topNames.join(", ")}.`
-                    : "Your strongest area so far.",
-            };
-
-            const weak = sectionsByMeasure(s, weakId);
-            const w = weak[0];
-            if (w) {
-                const name = SECTION_WORD[w.code] ?? w.code;
-                const practice =
-                    weakId === "memory" ? `${name} flashcards` : `${name} problems`;
-                out[weakId] = {
-                    kind: "weakest",
-                    label: "Weakest",
-                    text: unlocked
-                        ? `Weakest: ${name}. Practice ${practice} next.`
-                        : `Weakest: ${name}. Finish today's path to unlock practice.`,
-                    link: unlocked
-                        ? {
-                              href: practiceHref(weakId, w.code),
-                              label: `Start ${practice} →`,
-                          }
-                        : undefined,
-                };
-            } else {
-                out[weakId] = {
-                    kind: "weakest",
-                    label: "Weakest",
-                    text: "Your weakest area — study here next.",
-                };
-            }
-        }
-        return out;
-    }
-
-    $: badges = computeBadges(
-        data?.scores ?? null,
-        data?.free_practice_unlocked ?? false,
-    );
-    let openInfo: string | null = null;
-    function toggleInfo(id: string): void {
-        openInfo = openInfo === id ? null : id;
-    }
+    $: rmPct = rm.total > 0 ? (rm.done / rm.total) * 100 : 0;
+    $: showProgress = diagnosticDone && !unlocked && rm.total > 0;
 </script>
-
-<svelte:window on:click={() => (openInfo = null)} />
 
 <div class="mcat-container">
     <header class="head">
@@ -245,6 +143,23 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         </div>
     </header>
 
+    {#if data && data.has_content}
+        <button class="do-next" class:unlocked on:click={() => goto(doNext.href)}>
+            <div class="dn-icon"><Icon name={doNext.icon} size={26} /></div>
+            <div class="dn-text">
+                <div class="dn-eyebrow">{doNext.eyebrow}</div>
+                <div class="dn-title">{doNext.title}</div>
+                <div class="dn-sub">{doNext.sub}</div>
+                {#if showProgress}
+                    <div class="dn-track">
+                        <div class="dn-fill" style={`width:${rmPct}%`}></div>
+                    </div>
+                {/if}
+            </div>
+            <div class="dn-arrow"><Icon name="arrow" size={22} /></div>
+        </button>
+    {/if}
+
     {#if loading}
         <div class="mcat-card">Loading…</div>
     {:else if !data?.has_content}
@@ -263,78 +178,42 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         <div class="grid">
             <section class="evcards">
                 <div class="ev-wrap">
-                    {#if badges.memory}
-                        <button
-                            class="badge {badges.memory.kind}"
-                            on:click|stopPropagation={() => toggleInfo("memory")}
-                        >
-                            {badges.memory.label}
-                            <span class="badge-i">i</span>
-                        </button>
-                        {#if openInfo === "memory"}
-                            <div class="popover">
-                                {badges.memory.text}
-                                {#if badges.memory.link}
-                                    <a
-                                        class="popover-link"
-                                        href={badges.memory.link.href}
-                                    >
-                                        {badges.memory.link.label}
-                                    </a>
-                                {/if}
-                            </div>
-                        {/if}
-                    {/if}
                     <EvidenceCard
                         id="memory"
                         title="Memory Recall"
                         icon="brain"
                         block={data.scores.memory}
                     />
+                    {#if nextSteps}
+                        <button
+                            class="nextlink"
+                            on:click={() => goto(nextSteps.memory.href)}
+                        >
+                            <span class="nextlink-lab">Best next step</span>
+                            <span class="nextlink-val">{nextSteps.memory.label} →</span>
+                        </button>
+                    {/if}
                 </div>
                 <div class="ev-wrap">
-                    {#if badges.performance}
-                        <button
-                            class="badge {badges.performance.kind}"
-                            on:click|stopPropagation={() => toggleInfo("performance")}
-                        >
-                            {badges.performance.label}
-                            <span class="badge-i">i</span>
-                        </button>
-                        {#if openInfo === "performance"}
-                            <div class="popover">
-                                {badges.performance.text}
-                                {#if badges.performance.link}
-                                    <a
-                                        class="popover-link"
-                                        href={badges.performance.link.href}
-                                    >
-                                        {badges.performance.link.label}
-                                    </a>
-                                {/if}
-                            </div>
-                        {/if}
-                    {/if}
                     <EvidenceCard
                         id="performance"
                         title="Applied Under Exam Conditions"
                         icon="target"
                         block={data.scores.performance}
                     />
+                    {#if nextSteps}
+                        <button
+                            class="nextlink"
+                            on:click={() => goto(nextSteps.performance.href)}
+                        >
+                            <span class="nextlink-lab">Best next step</span>
+                            <span class="nextlink-val">
+                                {nextSteps.performance.label} →
+                            </span>
+                        </button>
+                    {/if}
                 </div>
                 <div class="ev-wrap">
-                    {#if badges.readiness}
-                        <button
-                            class="badge {badges.readiness.kind}"
-                            on:click|stopPropagation={() => toggleInfo("readiness")}
-                        >
-                            {badges.readiness.label}
-                            <span class="badge-i">i</span>
-                        </button>
-                        {#if openInfo === "readiness"}
-                            <div class="popover">{badges.readiness.text}</div>
-                        {/if}
-                    {/if}
                     <EvidenceCard
                         id="readiness"
                         title="Overall Readiness"
@@ -343,6 +222,17 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
                         scaleMin={472}
                         scaleMax={528}
                     />
+                    {#if nextSteps}
+                        <button
+                            class="nextlink"
+                            on:click={() => goto(nextSteps.readiness.href)}
+                        >
+                            <span class="nextlink-lab">Best next step</span>
+                            <span class="nextlink-val">
+                                {nextSteps.readiness.label} →
+                            </span>
+                        </button>
+                    {/if}
                 </div>
             </section>
 
@@ -423,6 +313,95 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         font-size: 14px;
         font-weight: 600;
         color: var(--mcat-text);
+    }
+    /* The big adaptive "what to do next" CTA. */
+    .do-next {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        width: 100%;
+        text-align: left;
+        appearance: none;
+        cursor: pointer;
+        color: #fff;
+        border: none;
+        border-radius: 18px;
+        padding: 18px 20px;
+        margin-bottom: 20px;
+        background: linear-gradient(135deg, var(--mcat-accent), var(--mcat-accent-2));
+        box-shadow: 0 14px 30px -14px
+            color-mix(in srgb, var(--mcat-accent) 70%, transparent);
+        transition:
+            transform 0.1s ease,
+            box-shadow 0.14s ease;
+        animation: dn-in 0.45s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+    }
+    @keyframes dn-in {
+        from {
+            opacity: 0;
+            transform: translateY(-8px);
+        }
+    }
+    .do-next:hover {
+        transform: translateY(-2px);
+    }
+    .do-next.unlocked {
+        background: linear-gradient(135deg, var(--mcat-green), #10b981);
+        box-shadow: 0 14px 30px -14px
+            color-mix(in srgb, var(--mcat-green) 70%, transparent);
+    }
+    .dn-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 48px;
+        height: 48px;
+        flex-shrink: 0;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.2);
+    }
+    .dn-text {
+        flex: 1;
+        min-width: 0;
+    }
+    .dn-eyebrow {
+        font-size: 12px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        opacity: 0.9;
+    }
+    .dn-title {
+        font-size: 22px;
+        font-weight: 800;
+        letter-spacing: -0.01em;
+        margin: 2px 0;
+    }
+    .dn-sub {
+        font-size: 14px;
+        font-weight: 600;
+        opacity: 0.92;
+    }
+    .dn-track {
+        margin-top: 10px;
+        height: 7px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.28);
+        overflow: hidden;
+    }
+    .dn-fill {
+        height: 100%;
+        border-radius: 999px;
+        background: #fff;
+    }
+    .dn-arrow {
+        flex-shrink: 0;
+        opacity: 0.9;
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .do-next {
+            animation: none;
+        }
     }
     .empty {
         max-width: 520px;
@@ -545,74 +524,45 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         font-weight: 700;
         color: var(--mcat-accent);
     }
-    /* Weakest / Strongest / Not-enough-data badges on the score cards, each
-       pressable for a one-line popup. */
+    /* Each score card stacks with a small "best next step" link below it. */
     .ev-wrap {
-        position: relative;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
     }
-    .badge {
-        position: absolute;
-        top: -10px;
-        left: 16px;
-        z-index: 3;
-        display: inline-flex;
+    .nextlink {
+        display: flex;
         align-items: center;
-        gap: 6px;
+        justify-content: space-between;
+        gap: 12px;
+        width: 100%;
         appearance: none;
         cursor: pointer;
-        border: none;
-        border-radius: 999px;
-        padding: 4px 10px;
-        font-size: 12px;
-        font-weight: 800;
-        color: #fff;
-        box-shadow: 0 4px 12px -4px rgba(16, 24, 40, 0.35);
-    }
-    .badge.weakest {
-        background: var(--mcat-red);
-    }
-    .badge.strongest {
-        background: var(--mcat-green);
-    }
-    .badge.nodata {
-        background: var(--mcat-muted);
-    }
-    .badge-i {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 15px;
-        height: 15px;
-        border-radius: 50%;
-        background: rgba(255, 255, 255, 0.28);
-        font-size: 10px;
-        font-weight: 800;
-        font-style: italic;
-    }
-    .popover {
-        position: absolute;
-        top: 18px;
-        left: 16px;
-        z-index: 5;
-        width: min(280px, 80vw);
+        text-align: left;
         background: var(--mcat-surface);
         border: 1px solid var(--mcat-border);
         border-radius: 12px;
-        box-shadow: var(--mcat-shadow);
-        padding: 12px 14px;
-        font-size: 14px;
-        font-weight: 600;
-        color: var(--mcat-text);
+        padding: 10px 14px;
+        transition:
+            border-color 0.12s ease,
+            transform 0.1s ease;
     }
-    .popover-link {
-        display: inline-block;
-        margin-top: 8px;
-        font-size: 13px;
+    .nextlink:hover {
+        border-color: color-mix(in srgb, var(--mcat-accent) 45%, var(--mcat-border));
+        transform: translateY(-1px);
+    }
+    .nextlink-lab {
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--mcat-muted);
+        white-space: nowrap;
+    }
+    .nextlink-val {
+        font-size: 14.5px;
         font-weight: 800;
         color: var(--mcat-accent);
-        text-decoration: none;
-    }
-    .popover-link:hover {
-        text-decoration: underline;
+        text-align: right;
     }
 </style>

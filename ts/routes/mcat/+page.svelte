@@ -20,6 +20,7 @@ Entry router: decides where a returning user lands based on their progress
             } else if (!profile.diagnostic_done) {
                 await goto("/mcat/diagnostic");
             } else {
+                // Home is the dashboard; it carries a big "what to do next" CTA.
                 await goto("/mcat/dashboard");
             }
         } catch (_e) {

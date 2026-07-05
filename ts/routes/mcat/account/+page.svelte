@@ -2,20 +2,17 @@
 Copyright: Ankitects Pty Ltd and contributors
 License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 
-Account: profile + streak, study settings (with a pace-to-goal bar that rebuilds
-the roadmap), the AI toggle, and a progress panel (three measures + engagement
-tallies).
+Account: profile + streak and settings only. Scores/progress live on the Scores
+tab and its detail pages, so this page stays focused on identity + commitment.
 -->
 <script lang="ts">
     import { goto } from "$app/navigation";
     import { onMount } from "svelte";
 
     import { postJson } from "../lib/api";
-    import { evidence, toneVar } from "../lib/blocks";
     import DaysRing from "../lib/DaysRing.svelte";
-    import Sparkline from "../lib/Sparkline.svelte";
     import Switch from "../lib/Switch.svelte";
-    import type { AccountData, Profile, ScoreBlock } from "../lib/types";
+    import type { AccountData, Profile } from "../lib/types";
 
     const RECOMMENDED = 120;
     const TIME_OPTIONS = [30, 45, 60, 90, 120, 150, 180];
@@ -97,44 +94,15 @@ tallies).
 
     $: days = data ? daysUntil(data.profile.exam_date ?? null) : null;
     $: dots = data ? weekDots(data.streak.count, data.streak.last_completed_date) : [];
-    $: paceFill = Math.min(100, (dailyMinutes / RECOMMENDED) * 100);
     $: remainingHr = Math.max(0, (RECOMMENDED - dailyMinutes) / 60);
+    $: paceFill = Math.min(100, (dailyMinutes / RECOMMENDED) * 100);
     $: initial = (data?.profile.name ?? "?").slice(0, 1).toUpperCase();
-
-    // The two percent-based progress cards (Recall, Applied) with their real
-    // trend series + net deltas from the account endpoint.
-    $: pctCards = data?.scores
-        ? [
-              {
-                  label: "Recall",
-                  block: data.scores.memory,
-                  series: data.trend?.recall ?? [],
-                  delta: data.trend?.recall_delta ?? 0,
-              },
-              {
-                  label: "Applied",
-                  block: data.scores.performance,
-                  series: data.trend?.applied ?? [],
-                  delta: data.trend?.applied_delta ?? 0,
-              },
-          ]
-        : [];
 
     const AI_FEATURES = [
         { label: "Reasoning feedback", color: "var(--mcat-blue)" },
         { label: "CARS debate", color: "var(--mcat-red)" },
         { label: "Study coach", color: "var(--mcat-green)" },
     ];
-
-    function pct(b: ScoreBlock | undefined): number {
-        return b && b.point != null ? Math.round(b.point) : 0;
-    }
-    function readyFill(b: ScoreBlock | undefined): number {
-        if (!b || b.abstained || b.point == null) {
-            return 0;
-        }
-        return Math.max(0, Math.min(100, ((b.point - 472) / (528 - 472)) * 100));
-    }
 
     onMount(load);
 </script>
@@ -143,7 +111,7 @@ tallies).
     <header class="head">
         <div>
             <h1 class="mcat-title">Account</h1>
-            <p class="mcat-subtitle">Your profile, commitment, and progress.</p>
+            <p class="mcat-subtitle">Your profile and study commitment.</p>
         </div>
         <button class="mcat-btn logout" on:click={logout}>Log out</button>
     </header>
@@ -251,83 +219,6 @@ tallies).
                 {/each}
             </div>
         </div>
-
-        <!-- Progress -->
-        <h2 class="prog-heading">Your progress</h2>
-        {#if data.scores}
-            <section class="prog-cards">
-                {#each pctCards as c (c.label)}
-                    <div class="prog {evidence(c.block).tone}">
-                        <div class="prog-head">
-                            <span class="prog-lab">{c.label}</span>
-                            {#if c.series.length > 1 && c.delta !== 0}
-                                <span class="delta {c.delta > 0 ? 'up' : 'down'}">
-                                    {c.delta > 0 ? "+" : "−"}{Math.abs(c.delta)}
-                                </span>
-                            {/if}
-                        </div>
-                        <div class="prog-val">
-                            {c.block.abstained ? "—" : `${pct(c.block)}%`}
-                        </div>
-                        {#if c.series.length > 1}
-                            <Sparkline
-                                points={c.series}
-                                color={toneVar(evidence(c.block).tone)}
-                            />
-                        {:else}
-                            <div class="prog-track">
-                                <div
-                                    class="prog-fill"
-                                    style={`width:${pct(c.block)}%;background:${toneVar(evidence(c.block).tone)}`}
-                                ></div>
-                            </div>
-                        {/if}
-                        <div class="prog-sub">{evidence(c.block).label}</div>
-                    </div>
-                {/each}
-
-                <div class="prog {evidence(data.scores.readiness).tone}">
-                    <div class="prog-head"><span class="prog-lab">Readiness</span></div>
-                    <div class="prog-val">
-                        {data.scores.readiness.abstained
-                            ? "—"
-                            : Math.round(data.scores.readiness.point ?? 0)}
-                    </div>
-                    <div class="prog-track">
-                        <div
-                            class="prog-fill"
-                            style={`width:${readyFill(data.scores.readiness)}%;background:${toneVar(evidence(data.scores.readiness).tone)}`}
-                        ></div>
-                    </div>
-                    <div class="prog-sub">
-                        {data.scores.readiness.abstained
-                            ? `${Math.min(data.stats?.reps ?? 0, 100)}/100 reviews`
-                            : evidence(data.scores.readiness).label}
-                    </div>
-                </div>
-            </section>
-        {/if}
-
-        {#if data.stats}
-            <section class="tiles">
-                <div class="tile">
-                    <div class="tile-num">{data.stats.reps}</div>
-                    <div class="tile-lab">reps</div>
-                </div>
-                <div class="tile">
-                    <div class="tile-num">{data.stats.sets}</div>
-                    <div class="tile-lab">sets</div>
-                </div>
-                <div class="tile">
-                    <div class="tile-num">{data.stats.debates}</div>
-                    <div class="tile-lab">debates</div>
-                </div>
-                <div class="tile">
-                    <div class="tile-num">{data.stats.studied_hours}h</div>
-                    <div class="tile-lab">studied</div>
-                </div>
-            </section>
-        {/if}
     {/if}
 </div>
 
@@ -527,7 +418,7 @@ tallies).
 
     /* AI features */
     .ai-card {
-        margin-bottom: 20px;
+        margin-bottom: 8px;
     }
     .ai-row {
         display: flex;
@@ -569,112 +460,6 @@ tallies).
         border-radius: 3px;
     }
 
-    /* Progress */
-    .prog-heading {
-        font-size: 19px;
-        margin: 4px 0 12px;
-    }
-    .prog-cards {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 14px;
-        margin-bottom: 14px;
-    }
-    .prog {
-        border-radius: var(--mcat-radius);
-        border: 1px solid var(--mcat-border);
-        background: var(--mcat-surface);
-        padding: 16px 18px;
-    }
-    .prog.green {
-        background: color-mix(in srgb, var(--mcat-green) 8%, var(--mcat-surface));
-        border-color: color-mix(in srgb, var(--mcat-green) 22%, var(--mcat-border));
-    }
-    .prog.amber {
-        background: color-mix(in srgb, var(--mcat-amber) 8%, var(--mcat-surface));
-        border-color: color-mix(in srgb, var(--mcat-amber) 22%, var(--mcat-border));
-    }
-    .prog.red {
-        background: color-mix(in srgb, var(--mcat-red) 7%, var(--mcat-surface));
-        border-color: color-mix(in srgb, var(--mcat-red) 20%, var(--mcat-border));
-    }
-    .prog-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-    }
-    .prog-lab {
-        font-size: 14px;
-        font-weight: 700;
-        color: var(--mcat-muted);
-    }
-    .delta {
-        font-size: 13px;
-        font-weight: 800;
-        padding: 2px 8px;
-        border-radius: 999px;
-        font-variant-numeric: tabular-nums;
-    }
-    .delta.up {
-        color: var(--mcat-green);
-        background: color-mix(in srgb, var(--mcat-green) 14%, transparent);
-    }
-    .delta.down {
-        color: var(--mcat-red);
-        background: color-mix(in srgb, var(--mcat-red) 14%, transparent);
-    }
-    .prog-val {
-        font-size: 34px;
-        font-weight: 800;
-        letter-spacing: -0.02em;
-        margin: 4px 0 12px;
-        font-variant-numeric: tabular-nums;
-    }
-    .prog-track {
-        height: 8px;
-        border-radius: 999px;
-        background: var(--mcat-track);
-        overflow: hidden;
-    }
-    .prog-fill {
-        height: 100%;
-        border-radius: 999px;
-        animation: paceGrow 0.7s cubic-bezier(0.2, 0.8, 0.3, 1);
-    }
-    .prog-sub {
-        margin-top: 10px;
-        font-size: 12.5px;
-        font-weight: 600;
-        color: var(--mcat-muted);
-    }
-
-    /* Stat tiles */
-    .tiles {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 14px;
-    }
-    .tile {
-        text-align: center;
-        border-radius: var(--mcat-radius);
-        border: 1px solid var(--mcat-border);
-        background: var(--mcat-surface);
-        padding: 18px 12px;
-    }
-    .tile-num {
-        font-size: 26px;
-        font-weight: 800;
-        letter-spacing: -0.02em;
-        font-variant-numeric: tabular-nums;
-    }
-    .tile-lab {
-        margin-top: 3px;
-        font-size: 13px;
-        font-weight: 600;
-        color: var(--mcat-muted);
-    }
-
     @media (max-width: 820px) {
         .profile {
             flex-wrap: wrap;
@@ -685,21 +470,12 @@ tallies).
             border-left: none;
             padding-left: 0;
         }
-        .prog-cards {
-            grid-template-columns: 1fr;
-        }
-        .tiles {
-            grid-template-columns: repeat(2, 1fr);
-        }
     }
 
     /* Staggered slide-in on load. */
     .profile,
     .settings,
-    .ai-card,
-    .prog-heading,
-    .prog-cards,
-    .tiles {
+    .ai-card {
         animation: acct-slide 0.5s cubic-bezier(0.2, 0.8, 0.3, 1) both;
     }
     .profile {
@@ -710,15 +486,6 @@ tallies).
     }
     .ai-card {
         animation-delay: 0.16s;
-    }
-    .prog-heading {
-        animation-delay: 0.22s;
-    }
-    .prog-cards {
-        animation-delay: 0.28s;
-    }
-    .tiles {
-        animation-delay: 0.34s;
     }
     @keyframes acct-slide {
         from {
@@ -734,11 +501,7 @@ tallies).
         .profile,
         .settings,
         .ai-card,
-        .prog-heading,
-        .prog-cards,
-        .tiles,
-        .pace-fill,
-        .prog-fill {
+        .pace-fill {
             animation: none;
         }
     }

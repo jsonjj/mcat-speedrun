@@ -62,6 +62,7 @@ export interface DashboardData {
     streak: Streak;
     scores: Scores | null;
     free_practice_unlocked?: boolean;
+    roadmap?: { done: number; total: number };
 }
 
 export interface Choice {
@@ -188,6 +189,9 @@ export interface AccountStats {
     attempts: number;
     debates: number;
     studied_hours: number;
+    reps_this_week: number;
+    attempts_this_week: number;
+    sets_this_week: number;
 }
 
 export interface AccountTrend {

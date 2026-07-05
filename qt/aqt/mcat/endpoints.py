@@ -77,16 +77,21 @@ def mcat_dashboard() -> bytes:
     has_content = bool(questions.performance_note_ids(col))
     if has_content:
         content.ensure_current(col)  # swap in updated flashcards if the pack changed
+    plan = planner.get_or_build_plan(col) if has_content else None
+    blocks = plan["blocks"] if plan else []
     payload = {
         "has_content": has_content,
         "profile": _public(store.get_profile(col)),
         "streak": store.get_streak(col),
         "scores": scoring.compute_scores(col) if has_content else None,
         "free_practice_unlocked": (
-            planner.required_complete(planner.get_or_build_plan(col))
-            if has_content
-            else False
+            planner.required_complete(plan) if plan else False
         ),
+        # Roadmap progress drives the big "what to do next" CTA on the dashboard.
+        "roadmap": {
+            "done": sum(1 for b in blocks if b.get("completed")),
+            "total": len(blocks),
+        },
     }
     return _json(payload)
 
@@ -151,6 +156,11 @@ def _account_stats(col: Any) -> dict[str, Any]:
     total_attempts = len(attempts)
     sets = len({a.get("batch_id") for a in attempts if a.get("batch_id")})
     debates = len(store.get_debates(col))
+    # This week (rolling 7 days) — drives the "N this week" chips on the detail pages.
+    week_ago = int(time.time()) - 7 * 86400
+    reps_week = sum(1 for r in reviews if int(r.get("ts", 0)) >= week_ago)
+    week_attempts = [a for a in attempts if int(a.get("ts", 0)) >= week_ago]
+    sets_week = len({a.get("batch_id") for a in week_attempts if a.get("batch_id")})
     # Engagement estimate (~8s/flashcard, ~75s/question, ~4min/debate).
     seconds = reps * 8 + total_attempts * 75 + debates * 240
     return {
@@ -159,6 +169,9 @@ def _account_stats(col: Any) -> dict[str, Any]:
         "attempts": total_attempts,
         "debates": debates,
         "studied_hours": round(seconds / 3600, 1),
+        "reps_this_week": reps_week,
+        "attempts_this_week": len(week_attempts),
+        "sets_this_week": sets_week,
     }
 
 

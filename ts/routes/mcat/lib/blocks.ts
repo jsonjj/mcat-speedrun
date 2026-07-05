@@ -1,7 +1,7 @@
 // Copyright: Ankitects Pty Ltd and contributors
 // License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 
-import type { RoadmapBlock, ScoreBlock } from "./types";
+import type { RoadmapBlock, ScoreBlock, Scores } from "./types";
 
 // A color per block, based on what you're doing. Section drives the hue for
 // study blocks; special kinds (Mini-MCAT, memory maintenance, full-length) get
@@ -103,6 +103,58 @@ export function evidence(b: ScoreBlock): { tone: Tone; label: string } {
         return { tone: "amber", label: "Moderate Evidence" };
     }
     return { tone: "red", label: "Thin Evidence" };
+}
+
+const SECTION_ORDER = ["bb", "cp", "ps", "cars"];
+
+function weakestSection(
+    scores: Scores,
+    measure: "memory" | "performance",
+): { code: string; name: string } | null {
+    const rows = SECTION_ORDER.map((code) => {
+        const b = scores.sections[code]?.[measure];
+        return {
+            code,
+            name: SECTION_WORD[code] ?? code,
+            point: b && !b.abstained && b.point != null ? b.point : null,
+        };
+    }).filter((r) => r.point != null);
+    if (rows.length === 0) {
+        return null;
+    }
+    rows.sort((a, b) => (a.point ?? 0) - (b.point ?? 0));
+    return { code: rows[0].code, name: rows[0].name };
+}
+
+// The single best next action for a score — the SAME target the score's detail
+// page uses, so the dashboard link and the detail page always agree.
+export function bestNextStep(
+    scores: Scores,
+    id: "memory" | "performance" | "readiness",
+): { label: string; href: string } {
+    if (id === "memory") {
+        const w = weakestSection(scores, "memory");
+        return w
+            ? {
+                  label: `${w.name} flashcards`,
+                  href: `/mcat/flashcards?section=${w.code}`,
+              }
+            : { label: "Start a memory block", href: "/mcat/flashcards" };
+    }
+    if (id === "performance") {
+        const w = weakestSection(scores, "performance");
+        return w
+            ? { label: `Timed set — ${w.name}`, href: `/mcat/mini?section=${w.code}` }
+            : { label: "Do a question set", href: "/mcat/mini" };
+    }
+    // readiness
+    if (scores.readiness.abstained) {
+        return { label: "Do a review set", href: "/mcat/flashcards" };
+    }
+    const w = weakestSection(scores, "performance");
+    return w
+        ? { label: `Sharpen ${w.name}`, href: `/mcat/mini?section=${w.code}` }
+        : { label: "See full breakdown", href: "/mcat/breakdown" };
 }
 
 // Activity type (color + icon + label) for a roadmap node, matching the legend:
