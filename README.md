@@ -19,8 +19,16 @@ of Anki are BSD-3-Clause. Credit to the Anki project.
 - `docs/mcat-overview.md` — architecture overview of the MCAT layer.
 - `docs/mcat-mastery-query-note.md` — the Rust engine change (why Rust, files
   touched, merge risk) + the shared `mcat_core` engine.
-- `docs/mcat-ai-note.md` — the AI features, source tracing, held-out eval +
-  baseline, and the give-up rule.
+- `docs/mcat-models.md` — one page each for the Memory, Performance and Readiness
+  models, incl. the give-up rule and the honesty rule.
+- `docs/mcat-results.md` — the results report: every eval, its cutoff, and the
+  baseline it beats (plus what didn't work).
+- `docs/mcat-ablation.md` — the study-feature ablation (three builds).
+- `docs/mcat-calibration.md` — memory-model calibration (chart + Brier/log-loss).
+- `docs/mcat-performance-eval.md` — performance-model held-out accuracy.
+- `docs/mcat-sync.md` — conflict-free sync (offline same-card merge).
+- `docs/mcat-ai-note.md` — the AI features, source tracing, held-out evals +
+  baselines.
 
 ### Build & run
 
@@ -34,11 +42,13 @@ of Anki are BSD-3-Clause. Credit to the Anki project.
   feedback, CARS debate, study coach), each grounded in a named source. The key
   is read from `OPENAI_API_KEY` or a gitignored file (desktop
   `pylib/anki/mcat/.openai_key`, iOS `ios/MCATSpeedrun/Resources/openai_key.txt`).
-- **AI evals** (held-out, each beats a baseline; key from env or the file):
-  `PYTHONPATH="pylib:out/pylib" out/pyenv/bin/python tools/mcat/eval_reasoning.py`
-  (and `eval_coach.py`, `eval_cars.py`, plus `eval_injection.py` — a
-  prompt-injection probe with hidden-text source attacks). See
-  `docs/mcat-ai-note.md`.
+- **Evals & evidence** (all re-runnable, each with a declared cutoff; see
+  `docs/mcat-results.md`):
+  - Models/study (deterministic): `tools/mcat/ablation.py`,
+    `tools/mcat/calibration.py`, `tools/mcat/perf_eval.py`.
+  - AI (need a key): `tools/mcat/eval_reasoning.py`, `eval_coach.py`,
+    `eval_cars.py`, `eval_injection.py` (prompt-injection with hidden-text
+    source attacks). Each beats a stated baseline.
 - **Give-up rule:** Readiness shows no number unless all four sections have ≥40%
   coverage and ≥2 performance sets, plus ≥100 graded reviews and ≥40 performance
   attempts overall; otherwise it abstains (a broad diagnostic unlocks a labeled

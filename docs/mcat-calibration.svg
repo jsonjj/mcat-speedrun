@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" font-family="-apple-system,Helvetica,Arial,sans-serif">
+<rect width="320" height="320" fill="white"/>
+<line x1="40" y1="280" x2="280" y2="280" stroke="#94a3b8"/>
+<line x1="40" y1="40" x2="40" y2="280" stroke="#94a3b8"/>
+<line x1="40" y1="280" x2="280" y2="40" stroke="#cbd5e1" stroke-dasharray="4 4"/>
+<polyline points="176.3,108.6 201.2,121.9 220.5,98.7 245.9,75.8 263.5,57.6" fill="none" stroke="#6366f1" stroke-width="2.5"/>
+<circle cx="176.3" cy="108.6" r="3.5" fill="#6366f1"/>
+<circle cx="201.2" cy="121.9" r="3.5" fill="#6366f1"/>
+<circle cx="220.5" cy="98.7" r="3.5" fill="#6366f1"/>
+<circle cx="245.9" cy="75.8" r="3.5" fill="#6366f1"/>
+<circle cx="263.5" cy="57.6" r="3.5" fill="#6366f1"/>
+<text x="160.0" y="310" text-anchor="middle" font-size="12" fill="#475569">Predicted recall</text>
+<text x="14" y="160.0" text-anchor="middle" font-size="12" fill="#475569" transform="rotate(-90 14 160.0)">Observed recall</text>
+<text x="160.0" y="20" text-anchor="middle" font-size="13" font-weight="bold" fill="#0f172a">FSRS memory calibration</text>
+</svg>
