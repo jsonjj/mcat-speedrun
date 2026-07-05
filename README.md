@@ -35,7 +35,14 @@ of Anki are BSD-3-Clause. Credit to the Anki project.
 - **Desktop:** `just run` (builds Rust + Python + web, launches the app).
   Tests: `cargo test -p anki mcat_core` and
   `PYTHONPATH="pylib:out/pylib" out/pyenv/bin/pytest pylib/tests/test_mcat.py`.
-  Installer wheels: `just wheels` (verified installable in a clean venv).
+- **Desktop installer:** `RELEASE=2 ./ninja installer` builds a real packaged
+  installer into `out/installer/dist/` (a `.dmg` on macOS, MSI on Windows, zip on
+  Linux). It's ad-hoc signed, so on a clean Mac right-click → Open (or
+  `xattr -cr /Applications/Anki.app`) to clear Gatekeeper.
+  **iCloud note:** if the repo lives on an iCloud-synced Desktop/Documents,
+  Briefcase's codesign can't run in place — point the build dir outside iCloud
+  first: `rm -rf out/installer && ln -sfn ~/Library/Caches/mcat-installer out/installer`.
+  `just wheels` also produces installable wheels.
 - **iOS:** `bash ios/build-ffi.sh` (builds the shared engine into an
   xcframework), then `bash ios/run-sim.sh` (builds + launches on the Simulator).
 - **AI:** on by default, same three features on desktop + iOS (reasoning
