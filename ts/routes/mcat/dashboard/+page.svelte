@@ -8,6 +8,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 
     import { postJson } from "../lib/api";
     import { SECTION_WORD, bestNextStep, evidence, toneVar } from "../lib/blocks";
+    import CtaSquare from "../lib/CtaSquare.svelte";
     import DaysRing from "../lib/DaysRing.svelte";
     import EvidenceCard from "../lib/EvidenceCard.svelte";
     import Icon from "../lib/Icon.svelte";
@@ -143,23 +144,6 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         </div>
     </header>
 
-    {#if data && data.has_content}
-        <button class="do-next" class:unlocked on:click={() => goto(doNext.href)}>
-            <div class="dn-icon"><Icon name={doNext.icon} size={26} /></div>
-            <div class="dn-text">
-                <div class="dn-eyebrow">{doNext.eyebrow}</div>
-                <div class="dn-title">{doNext.title}</div>
-                <div class="dn-sub">{doNext.sub}</div>
-                {#if showProgress}
-                    <div class="dn-track">
-                        <div class="dn-fill" style={`width:${rmPct}%`}></div>
-                    </div>
-                {/if}
-            </div>
-            <div class="dn-arrow"><Icon name="arrow" size={22} /></div>
-        </button>
-    {/if}
-
     {#if loading}
         <div class="mcat-card">Loading…</div>
     {:else if !data?.has_content}
@@ -203,8 +187,19 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
             </section>
 
             <div class="rightcol">
-                <div class="ring-wrap">
-                    <DaysRing {days} size={196} />
+                <CtaSquare
+                    eyebrow={doNext.eyebrow}
+                    title={doNext.title}
+                    sub={doNext.sub}
+                    icon={doNext.icon}
+                    href={doNext.href}
+                    green={unlocked}
+                    done={unlocked}
+                    progress={showProgress ? rmPct / 100 : null}
+                />
+
+                <div class="ring-row">
+                    <DaysRing {days} size={104} />
                     {#if data.streak.count > 0}
                         <div class="streak">🔥 {data.streak.count}-day streak</div>
                     {/if}
@@ -280,95 +275,6 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         font-weight: 600;
         color: var(--mcat-text);
     }
-    /* The big adaptive "what to do next" CTA. */
-    .do-next {
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        width: 100%;
-        text-align: left;
-        appearance: none;
-        cursor: pointer;
-        color: #fff;
-        border: none;
-        border-radius: 18px;
-        padding: 18px 20px;
-        margin-bottom: 20px;
-        background: linear-gradient(135deg, var(--mcat-accent), var(--mcat-accent-2));
-        box-shadow: 0 14px 30px -14px
-            color-mix(in srgb, var(--mcat-accent) 70%, transparent);
-        transition:
-            transform 0.1s ease,
-            box-shadow 0.14s ease;
-        animation: dn-in 0.45s cubic-bezier(0.2, 0.8, 0.3, 1) both;
-    }
-    @keyframes dn-in {
-        from {
-            opacity: 0;
-            transform: translateY(-8px);
-        }
-    }
-    .do-next:hover {
-        transform: translateY(-2px);
-    }
-    .do-next.unlocked {
-        background: linear-gradient(135deg, var(--mcat-green), #10b981);
-        box-shadow: 0 14px 30px -14px
-            color-mix(in srgb, var(--mcat-green) 70%, transparent);
-    }
-    .dn-icon {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 48px;
-        height: 48px;
-        flex-shrink: 0;
-        border-radius: 14px;
-        background: rgba(255, 255, 255, 0.2);
-    }
-    .dn-text {
-        flex: 1;
-        min-width: 0;
-    }
-    .dn-eyebrow {
-        font-size: 12px;
-        font-weight: 800;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        opacity: 0.9;
-    }
-    .dn-title {
-        font-size: 22px;
-        font-weight: 800;
-        letter-spacing: -0.01em;
-        margin: 2px 0;
-    }
-    .dn-sub {
-        font-size: 14px;
-        font-weight: 600;
-        opacity: 0.92;
-    }
-    .dn-track {
-        margin-top: 10px;
-        height: 7px;
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.28);
-        overflow: hidden;
-    }
-    .dn-fill {
-        height: 100%;
-        border-radius: 999px;
-        background: #fff;
-    }
-    .dn-arrow {
-        flex-shrink: 0;
-        opacity: 0.9;
-    }
-    @media (prefers-reduced-motion: reduce) {
-        .do-next {
-            animation: none;
-        }
-    }
     .empty {
         max-width: 520px;
     }
@@ -381,7 +287,7 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         gap: 20px;
         align-items: stretch;
         /* Fill the viewport (columns spread to fill) with no mid-page gap. */
-        min-height: calc(100dvh - 208px);
+        min-height: calc(100dvh - 140px);
     }
     @media (max-width: 900px) {
         .grid {
@@ -402,11 +308,12 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         justify-content: space-between;
         gap: 16px;
     }
-    .ring-wrap {
+    /* Days-to-go is now a small, secondary element: ring + streak in a row. */
+    .ring-row {
         display: flex;
-        flex-direction: column;
         align-items: center;
-        gap: 8px;
+        justify-content: center;
+        gap: 14px;
     }
     .streak {
         font-size: 14px;

@@ -13,6 +13,7 @@ struct DashboardView: View {
 
     @State private var showMastery = false
     @State private var draft: Double = 80
+    @State private var ctaPulse = false
 
     private var model: DashboardModel { Scoring.model(app: app, progress: progress) }
 
@@ -103,11 +104,21 @@ struct DashboardView: View {
         return NavigationLink { ctaDestination } label: {
             HStack(spacing: 14) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.2))
+                    Circle().fill(Color.white.opacity(0.2))
+                        .scaleEffect(ctaPulse ? 1.06 : 0.96)
+                    Circle().stroke(Color.white.opacity(0.5), lineWidth: 2)
+                        .scaleEffect(ctaPulse ? 1.5 : 1.0)
+                        .opacity(ctaPulse ? 0.0 : 0.55)
                     Image(systemName: c.icon).font(Theme.font(22, .bold))
                         .foregroundStyle(.white)
+                        .scaleEffect(ctaPulse ? 1.06 : 0.96)
                 }
-                .frame(width: 48, height: 48)
+                .frame(width: 52, height: 52)
+                .onAppear {
+                    withAnimation(
+                        .easeInOut(duration: 1.5).repeatForever(autoreverses: true)
+                    ) { ctaPulse = true }
+                }
                 VStack(alignment: .leading, spacing: 3) {
                     Text(c.eyebrow.uppercased())
                         .font(Theme.font(11, .heavy)).tracking(0.5)
