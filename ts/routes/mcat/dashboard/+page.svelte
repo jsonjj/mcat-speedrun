@@ -52,6 +52,19 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         return Math.max(0, Math.round((exam.getTime() - today.getTime()) / 86400000));
     }
 
+    function daysSince(iso: string | null): number | null {
+        if (!iso) {
+            return null;
+        }
+        const start = new Date(iso + "T00:00:00");
+        if (isNaN(start.getTime())) {
+            return null;
+        }
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return Math.max(0, Math.round((today.getTime() - start.getTime()) / 86400000));
+    }
+
     onMount(load);
 
     $: sectionReadiness = data?.scores
@@ -69,11 +82,13 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         ? sectionReadiness.reduce((s, x) => s + (x.r.high ?? 0), 0)
         : 0;
     $: days = daysUntil(data?.profile.exam_date ?? null);
-    // Timeline: how far into the ~180-day prep window we are.
-    const EXAM_HORIZON = 180;
-    $: daysIn = days == null ? 0 : Math.max(0, EXAM_HORIZON - days);
+    // Timeline: how far into the real prep window (start date → exam) we are.
+    $: daysIn = daysSince(data?.profile.start_date ?? null) ?? 0;
+    $: total = daysIn + (days ?? 0);
     $: examPct =
-        days == null ? 0 : Math.max(4, Math.min(96, (daysIn / EXAM_HORIZON) * 100));
+        days == null || total <= 0
+            ? 0
+            : Math.max(4, Math.min(96, (daysIn / total) * 100));
 
     // The best next step for each score — the SAME target its detail page uses,
     // so the small link under each card and the detail page always agree.

@@ -127,6 +127,22 @@ enum Scoring {
         var attemptsWeek = 0
     }
 
+    /// Unix-seconds timestamp of the earliest study event (review/attempt), or
+    /// nil if there's no activity yet — the student's real prep start date.
+    /// Cross-device consistent (same merged log as the desktop).
+    static func startTimestamp(progress: ProgressStore) -> Int? {
+        guard let data = progress.combinedLogJSON().data(using: .utf8),
+            let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        let reviews = (obj["reviews"] as? [[String: Any]]) ?? []
+        let attempts = (obj["attempts"] as? [[String: Any]]) ?? []
+        let tss =
+            (reviews + attempts)
+            .compactMap { $0["ts"] as? Int }
+            .filter { $0 > 0 }
+        return tss.min()
+    }
+
     /// Log counts for the score detail pages: total reviews (reps) and attempts
     /// (sets), plus the last-7-days counts. ts is Unix seconds (see ProgressStore).
     static func activity(progress: ProgressStore) -> Activity {

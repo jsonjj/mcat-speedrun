@@ -357,12 +357,21 @@ struct DashboardView: View {
 
     // MARK: - Days-to-go timeline + streak
 
+    /// Days since the student's first study event (their real prep start).
+    private var examDaysIn: Int {
+        guard let ts = Scoring.startTimestamp(progress: progress) else { return 0 }
+        let cal = Calendar.current
+        let start = cal.startOfDay(for: Date(timeIntervalSince1970: Double(ts)))
+        let today = cal.startOfDay(for: Date())
+        return max(0, cal.dateComponents([.day], from: start, to: today).day ?? 0)
+    }
+
     private var examCard: some View {
         let has = app.daysToGo != nil
         let days = app.daysToGo ?? 0
-        let horizon = 180
-        let daysIn = max(0, horizon - days)
-        let pct = has ? min(0.96, max(0.04, Double(daysIn) / Double(horizon))) : 0.04
+        let daysIn = examDaysIn
+        let total = daysIn + max(0, days)
+        let pct = (has && total > 0) ? min(0.96, max(0.04, Double(daysIn) / Double(total))) : 0.04
         return HStack(spacing: 16) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .firstTextBaseline, spacing: 7) {

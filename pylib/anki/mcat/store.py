@@ -72,6 +72,9 @@ def get_profile(col: anki.collection.Collection) -> dict[str, Any]:
         "password": None,  # local-only; never returned to the client
         "auth_provider": "password",  # "password" | "google"
         "exam_date": None,  # ISO date string
+        # ISO date the student started prep — the earliest study activity (or the
+        # day they set up), used for the dashboard's exam-progress timeline.
+        "start_date": None,
         "daily_minutes": 120,  # 2 hours/day recommended baseline
         "onboarding_done": False,
         "diagnostic_done": False,

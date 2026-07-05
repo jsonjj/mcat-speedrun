@@ -41,6 +41,7 @@ export interface Profile {
     name: string | null;
     email: string | null;
     exam_date: string | null;
+    start_date: string | null;
     daily_minutes: number;
     onboarding_done: boolean;
     diagnostic_done: boolean;

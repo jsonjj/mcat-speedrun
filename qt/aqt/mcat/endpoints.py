@@ -71,9 +71,40 @@ def _public(profile: dict[str, Any]) -> dict[str, Any]:
 #############################################################################
 
 
+def _earliest_event_date(col: Any) -> str | None:
+    """ISO date of the earliest study event (review/attempt) in the merged log,
+    or None if there's no activity yet. Cross-device consistent (replay-union)."""
+    combined = json.loads(
+        col._backend.mcat_merge(
+            state_json=json.dumps(store.get_mcat_log(col)),
+            other_json=json.dumps(store.get_remote_mcat_log(col)),
+        )
+    )
+    tss = [
+        int(e.get("ts", 0))
+        for e in combined.get("reviews", []) + combined.get("attempts", [])
+        if int(e.get("ts", 0)) > 0
+    ]
+    if not tss:
+        return None
+    return datetime.date.fromtimestamp(min(tss)).isoformat()
+
+
+def _ensure_start_date(col: Any) -> None:
+    """Pin the prep start date once: the earliest real activity if any, else
+    today. Persisted so the timeline stays stable and syncs across devices."""
+    profile = store.get_profile(col)
+    if profile.get("start_date"):
+        return
+    store.update_profile(
+        col, start_date=_earliest_event_date(col) or datetime.date.today().isoformat()
+    )
+
+
 def mcat_dashboard() -> bytes:
     col = _col()
     firebase_sync.pull(col)  # best-effort: reflect changes made on other devices
+    _ensure_start_date(col)
     has_content = bool(questions.performance_note_ids(col))
     if has_content:
         content.ensure_current(col)  # swap in updated flashcards if the pack changed
