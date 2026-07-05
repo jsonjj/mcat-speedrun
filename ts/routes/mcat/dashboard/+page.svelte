@@ -9,7 +9,6 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     import { postJson } from "../lib/api";
     import { SECTION_WORD, bestNextStep, evidence, toneVar } from "../lib/blocks";
     import CtaSquare from "../lib/CtaSquare.svelte";
-    import DaysRing from "../lib/DaysRing.svelte";
     import EvidenceCard from "../lib/EvidenceCard.svelte";
     import Icon from "../lib/Icon.svelte";
     import RangeBar from "../lib/RangeBar.svelte";
@@ -70,6 +69,11 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         ? sectionReadiness.reduce((s, x) => s + (x.r.high ?? 0), 0)
         : 0;
     $: days = daysUntil(data?.profile.exam_date ?? null);
+    // Timeline: how far into the ~180-day prep window we are.
+    const EXAM_HORIZON = 180;
+    $: daysIn = days == null ? 0 : Math.max(0, EXAM_HORIZON - days);
+    $: examPct =
+        days == null ? 0 : Math.max(4, Math.min(96, (daysIn / EXAM_HORIZON) * 100));
 
     // The best next step for each score — the SAME target its detail page uses,
     // so the small link under each card and the detail page always agree.
@@ -198,15 +202,35 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
                     progress={showProgress ? rmPct / 100 : null}
                 />
 
-                <div class="days-card">
-                    <DaysRing {days} size={50} bare />
-                    <div class="days-text">
-                        <span class="days-num">{days ?? "—"}</span>
-                        <span class="days-lab">days to go</span>
+                <div class="exam-card">
+                    <div class="exam-main">
+                        <div class="exam-top">
+                            <span class="exam-num">{days ?? "—"}</span>
+                            <span class="exam-lab">days to go</span>
+                        </div>
+                        <div class="exam-track">
+                            <div class="exam-fill" style={`width:${examPct}%`}></div>
+                            <div class="exam-end"></div>
+                            <div class="exam-knob" style={`left:${examPct}%`}></div>
+                        </div>
+                        <div class="exam-marks">
+                            <span class="m-edge">started</span>
+                            {#if days != null}
+                                <span class="m-now" style={`left:${examPct}%`}>
+                                    {daysIn} days in
+                                </span>
+                            {/if}
+                            <span class="m-edge m-right">exam day</span>
+                        </div>
                     </div>
-                    {#if data.streak.count > 0}
-                        <div class="streak-chip">🔥 {data.streak.count}</div>
-                    {/if}
+                    <div class="exam-sep"></div>
+                    <div class="streak-box">
+                        <span class="streak-fire">🔥</span>
+                        <div class="streak-txt">
+                            <span class="streak-n">{data.streak.count}</span>
+                            <span class="streak-l">day streak</span>
+                        </div>
+                    </div>
                 </div>
 
                 <button class="estimate" on:click={() => goto("/mcat/breakdown")}>
@@ -289,65 +313,162 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         display: grid;
         grid-template-columns: 1.05fr 0.95fr;
         gap: 16px;
-        align-items: start;
+        align-items: stretch;
     }
     @media (max-width: 900px) {
         .grid {
             grid-template-columns: 1fr;
         }
     }
+    /* Both columns fill the same height; cards grow evenly (tight gaps, no
+       big spacers) so the two columns' tops AND bottoms line up. */
     .evcards {
         display: flex;
         flex-direction: column;
         gap: 14px;
+    }
+    .evcards :global(.ev) {
+        flex: 1;
     }
     .rightcol {
         display: flex;
         flex-direction: column;
         gap: 14px;
     }
-    /* Compact days-to-go + streak block (small, secondary). */
-    .days-card {
+    .rightcol .estimate {
+        flex: 1;
+    }
+    /* Days-to-go timeline + streak block. */
+    .exam-card {
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 20px;
         background: var(--mcat-surface);
         border: 1px solid var(--mcat-border);
-        border-radius: 16px;
-        padding: 12px 16px;
+        border-radius: 18px;
+        padding: 16px 20px;
         box-shadow: var(--mcat-shadow);
     }
-    .days-text {
+    .exam-main {
+        flex: 1;
+        min-width: 0;
+    }
+    .exam-top {
         display: flex;
         align-items: baseline;
-        gap: 7px;
+        gap: 8px;
+        margin-bottom: 14px;
     }
-    .days-num {
-        font-size: 26px;
+    .exam-num {
+        font-size: 28px;
         font-weight: 800;
         letter-spacing: -0.02em;
         color: var(--mcat-text);
         font-variant-numeric: tabular-nums;
     }
-    .days-lab {
+    .exam-lab {
         font-size: 15px;
         font-weight: 600;
         color: var(--mcat-muted);
     }
-    .streak-chip {
-        margin-left: auto;
-        font-size: 15px;
+    .exam-track {
+        position: relative;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--mcat-track);
+    }
+    .exam-fill {
+        position: absolute;
+        left: 0;
+        top: 0;
+        height: 100%;
+        border-radius: 999px;
+        background: var(--mcat-accent);
+    }
+    .exam-end {
+        position: absolute;
+        right: -2px;
+        top: 50%;
+        width: 11px;
+        height: 11px;
+        border-radius: 3px;
+        background: var(--mcat-surface);
+        border: 2px solid var(--mcat-border);
+        transform: translate(0, -50%);
+    }
+    .exam-knob {
+        position: absolute;
+        top: 50%;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: var(--mcat-surface);
+        border: 3px solid var(--mcat-accent);
+        transform: translate(-50%, -50%);
+        box-shadow: 0 2px 6px rgba(16, 24, 40, 0.18);
+    }
+    .exam-marks {
+        position: relative;
+        margin-top: 9px;
+        height: 15px;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--mcat-muted);
+    }
+    .m-edge {
+        position: absolute;
+        left: 0;
+    }
+    .m-right {
+        left: auto;
+        right: 0;
+    }
+    .m-now {
+        position: absolute;
+        transform: translateX(-50%);
+        white-space: nowrap;
+        color: var(--mcat-accent);
+    }
+    .exam-sep {
+        align-self: stretch;
+        width: 1px;
+        background: var(--mcat-border);
+    }
+    .streak-box {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-shrink: 0;
+        background: color-mix(in srgb, var(--mcat-amber) 15%, transparent);
+        border-radius: 14px;
+        padding: 11px 18px;
+    }
+    .streak-fire {
+        font-size: 22px;
+    }
+    .streak-txt {
+        display: flex;
+        flex-direction: column;
+        line-height: 1.08;
+    }
+    .streak-n {
+        font-size: 22px;
         font-weight: 800;
         color: var(--mcat-amber);
-        background: color-mix(in srgb, var(--mcat-amber) 16%, transparent);
-        padding: 6px 14px;
-        border-radius: 999px;
+        font-variant-numeric: tabular-nums;
+    }
+    .streak-l {
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--mcat-amber);
+        opacity: 0.9;
     }
     .estimate {
         appearance: none;
         cursor: pointer;
         text-align: left;
-        display: block;
+        display: flex;
+        flex-direction: column;
         width: 100%;
         /* Don't inherit Anki's button color (--fg), which is dark in dark mode. */
         color: var(--mcat-text);
@@ -417,7 +538,8 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
         align-items: center;
         gap: 5px;
         justify-content: flex-end;
-        margin-top: 16px;
+        margin-top: auto;
+        padding-top: 16px;
         font-size: 14px;
         font-weight: 700;
         color: var(--mcat-accent);

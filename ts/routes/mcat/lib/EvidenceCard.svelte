@@ -122,8 +122,10 @@ matching score detail page.
         text-align: left;
         cursor: pointer;
         width: 100%;
+        flex: 1;
         display: flex;
         flex-direction: column;
+        justify-content: center;
         gap: 12px;
         background: transparent;
         border: none;

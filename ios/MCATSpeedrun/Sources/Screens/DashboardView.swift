@@ -27,7 +27,7 @@ struct DashboardView: View {
 
                 ctaLink
 
-                ringSection
+                examCard
 
                 scoreBlock(
                     title: "Memory Recall", icon: ScoreKind.memory.icon,
@@ -355,20 +355,82 @@ struct DashboardView: View {
         .presentationDetents([.medium])
     }
 
-    // MARK: - Days ring + streak
+    // MARK: - Days-to-go timeline + streak
 
-    private var ringSection: some View {
-        VStack(spacing: 8) {
-            DaysRingView(days: app.daysToGo ?? model.daysToGo)
-            if app.streak > 0 {
-                HStack(spacing: 6) {
-                    Image(systemName: "flame.fill")
-                    Text("\(app.streak)-day streak")
+    private var examCard: some View {
+        let has = app.daysToGo != nil
+        let days = app.daysToGo ?? 0
+        let horizon = 180
+        let daysIn = max(0, horizon - days)
+        let pct = has ? min(0.96, max(0.04, Double(daysIn) / Double(horizon))) : 0.04
+        return HStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .firstTextBaseline, spacing: 7) {
+                    Text(has ? "\(days)" : "—")
+                        .font(Theme.font(26, .heavy)).foregroundStyle(Theme.text)
+                    Text("days to go").font(Theme.font(15, .semibold))
+                        .foregroundStyle(Theme.muted)
                 }
-                .font(Theme.font(14, .bold)).foregroundStyle(Theme.amber)
+                examTimeline(pct: pct, daysIn: daysIn, has: has)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Rectangle().fill(Theme.border).frame(width: 1, height: 48)
+
+            HStack(spacing: 9) {
+                Text("🔥").font(.system(size: 20))
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("\(app.streak)").font(Theme.font(20, .heavy))
+                        .foregroundStyle(Theme.amber)
+                    Text("day streak").font(Theme.font(11, .bold))
+                        .foregroundStyle(Theme.amber)
+                }
+            }
+            .padding(.horizontal, 16).padding(.vertical, 10)
+            .background(RoundedRectangle(cornerRadius: 14).fill(Theme.amber.opacity(0.16)))
         }
+        .padding(16)
         .frame(maxWidth: .infinity)
+        .background(RoundedRectangle(cornerRadius: 18).fill(Theme.surface))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Theme.border, lineWidth: 1))
+    }
+
+    private func examTimeline(pct: Double, daysIn: Int, has: Bool) -> some View {
+        VStack(spacing: 9) {
+            GeometryReader { geo in
+                let w = geo.size.width
+                let x = max(8, min(w - 8, w * pct))
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Theme.track).frame(height: 8)
+                    Capsule().fill(Theme.accent).frame(width: x, height: 8)
+                    Circle().fill(Theme.surface)
+                        .overlay(Circle().stroke(Theme.accent, lineWidth: 3))
+                        .frame(width: 16, height: 16)
+                        .offset(x: x - 8)
+                }
+                .frame(height: 16)
+            }
+            .frame(height: 16)
+
+            GeometryReader { geo in
+                let w = geo.size.width
+                let x = max(30, min(w - 30, w * pct))
+                ZStack {
+                    HStack {
+                        Text("started")
+                        Spacer()
+                        Text("exam day")
+                    }
+                    .font(Theme.font(12, .bold)).foregroundStyle(Theme.muted)
+                    if has {
+                        Text("\(daysIn) days in")
+                            .font(Theme.font(12, .bold)).foregroundStyle(Theme.accent)
+                            .position(x: x, y: 8)
+                    }
+                }
+            }
+            .frame(height: 16)
+        }
     }
 
 }
