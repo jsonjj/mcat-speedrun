@@ -59,9 +59,9 @@ pulsing orb and twinkling sparkles that invite a tap. Adapts to the day's state
         color: #fff;
         border-radius: 24px;
         padding: 22px 24px;
-        aspect-ratio: 1.2 / 1;
-        min-height: 250px;
-        max-height: 320px;
+        aspect-ratio: 1.25 / 1;
+        min-height: 230px;
+        max-height: 290px;
         overflow: hidden;
         background: linear-gradient(150deg, var(--mcat-accent), var(--mcat-accent-2));
         box-shadow: 0 20px 44px -20px

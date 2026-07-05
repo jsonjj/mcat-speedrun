@@ -198,10 +198,14 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
                     progress={showProgress ? rmPct / 100 : null}
                 />
 
-                <div class="ring-row">
-                    <DaysRing {days} size={104} />
+                <div class="days-card">
+                    <DaysRing {days} size={50} bare />
+                    <div class="days-text">
+                        <span class="days-num">{days ?? "—"}</span>
+                        <span class="days-lab">days to go</span>
+                    </div>
                     {#if data.streak.count > 0}
-                        <div class="streak">🔥 {data.streak.count}-day streak</div>
+                        <div class="streak-chip">🔥 {data.streak.count}</div>
                     {/if}
                 </div>
 
@@ -284,41 +288,60 @@ License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
     .grid {
         display: grid;
         grid-template-columns: 1.05fr 0.95fr;
-        gap: 20px;
-        align-items: stretch;
-        /* Fill the viewport (columns spread to fill) with no mid-page gap. */
-        min-height: calc(100dvh - 140px);
+        gap: 16px;
+        align-items: start;
     }
     @media (max-width: 900px) {
         .grid {
             grid-template-columns: 1fr;
-            align-items: stretch;
-            min-height: 0;
         }
     }
     .evcards {
         display: flex;
         flex-direction: column;
-        justify-content: space-between;
-        gap: 16px;
+        gap: 14px;
     }
     .rightcol {
         display: flex;
         flex-direction: column;
-        justify-content: space-between;
-        gap: 16px;
-    }
-    /* Days-to-go is now a small, secondary element: ring + streak in a row. */
-    .ring-row {
-        display: flex;
-        align-items: center;
-        justify-content: center;
         gap: 14px;
     }
-    .streak {
-        font-size: 14px;
-        font-weight: 700;
+    /* Compact days-to-go + streak block (small, secondary). */
+    .days-card {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        background: var(--mcat-surface);
+        border: 1px solid var(--mcat-border);
+        border-radius: 16px;
+        padding: 12px 16px;
+        box-shadow: var(--mcat-shadow);
+    }
+    .days-text {
+        display: flex;
+        align-items: baseline;
+        gap: 7px;
+    }
+    .days-num {
+        font-size: 26px;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        color: var(--mcat-text);
+        font-variant-numeric: tabular-nums;
+    }
+    .days-lab {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--mcat-muted);
+    }
+    .streak-chip {
+        margin-left: auto;
+        font-size: 15px;
+        font-weight: 800;
         color: var(--mcat-amber);
+        background: color-mix(in srgb, var(--mcat-amber) 16%, transparent);
+        padding: 6px 14px;
+        border-radius: 999px;
     }
     .estimate {
         appearance: none;

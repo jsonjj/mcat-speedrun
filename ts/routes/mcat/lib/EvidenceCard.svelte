@@ -124,10 +124,10 @@ matching score detail page.
         width: 100%;
         display: flex;
         flex-direction: column;
-        gap: 14px;
+        gap: 12px;
         background: transparent;
         border: none;
-        padding: 22px 24px;
+        padding: 18px 22px;
     }
     /* The recommended action, inside the same tinted box (divider above). */
     .ev-next {
@@ -136,7 +136,7 @@ matching score detail page.
         justify-content: space-between;
         gap: 12px;
         text-decoration: none;
-        padding: 14px 24px;
+        padding: 12px 22px;
         border-top: 1px solid color-mix(in srgb, var(--ev) 26%, var(--mcat-border));
         background: color-mix(in srgb, var(--ev) 6%, transparent);
         transition: background 0.12s ease;
@@ -182,7 +182,7 @@ matching score detail page.
         color: var(--mcat-text);
     }
     .value {
-        font-size: 40px;
+        font-size: 36px;
         font-weight: 800;
         letter-spacing: -0.02em;
         color: var(--ev);

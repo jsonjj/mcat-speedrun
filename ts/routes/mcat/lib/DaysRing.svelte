@@ -11,6 +11,8 @@ test day approaches (relative to a ~180-day horizon).
 
     export let days: number | null;
     export let size = 132;
+    // "bare" shows just the arc (no center number/label) for compact inline use.
+    export let bare = false;
 
     const R = 52;
     const C = 2 * Math.PI * R;
@@ -37,10 +39,12 @@ test day approaches (relative to a ~180-day horizon).
             transform="rotate(-90 60 60)"
         />
     </svg>
-    <div class="center">
-        <div class="num">{days === null ? "—" : Math.round($shownDays)}</div>
-        <div class="lab">{days === null ? "Set Exam Date" : "Days To Go"}</div>
-    </div>
+    {#if !bare}
+        <div class="center">
+            <div class="num">{days === null ? "—" : Math.round($shownDays)}</div>
+            <div class="lab">{days === null ? "Set Exam Date" : "Days To Go"}</div>
+        </div>
+    {/if}
 </div>
 
 <style lang="scss">

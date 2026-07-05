@@ -41,8 +41,6 @@ struct DashboardView: View {
                     title: "Overall Readiness", icon: ScoreKind.readiness.icon,
                     block: model.readiness, scaleMin: 472, scaleMax: 528,
                     kind: .readiness)
-
-                estimateCard
             }
             .padding(16)
         }
@@ -373,61 +371,6 @@ struct DashboardView: View {
         .frame(maxWidth: .infinity)
     }
 
-    // MARK: - Score estimate
-
-    /// Total = sum of the four section ranges once all four have an estimate.
-    private var totalRange: (low: Int, high: Int)? {
-        let sections = model.sections
-        let ready = sections.filter { !$0.abstained }
-        guard sections.count == 4, ready.count == 4 else { return nil }
-        let low = ready.reduce(0) { $0 + Int($1.low.rounded()) }
-        let high = ready.reduce(0) { $0 + Int($1.high.rounded()) }
-        return (low, high)
-    }
-
-    private var estimateCard: some View {
-        VStack(spacing: 16) {
-            HStack {
-                Text("Score Estimate")
-                    .font(Theme.font(18, .bold)).foregroundStyle(Theme.text)
-                Spacer()
-                Text(totalRange.map { "\($0.low) – \($0.high)" } ?? "—")
-                    .font(Theme.font(26, .heavy)).foregroundStyle(Theme.accent)
-            }
-            VStack(spacing: 13) {
-                ForEach(model.sections) { section in
-                    HStack(spacing: 12) {
-                        Text(section.code.word)
-                            .font(Theme.font(14, .bold)).foregroundStyle(Theme.text)
-                            .frame(width: 92, alignment: .leading)
-                        RangeBarView(
-                            lo: 118, hi: 132,
-                            low: section.low, high: section.high, point: section.point,
-                            color: section.abstained ? Theme.muted : section.tone.color)
-                        Text(
-                            section.abstained
-                                ? "—" : "\(Int(section.low)) – \(Int(section.high))"
-                        )
-                        .font(Theme.font(13, .bold)).foregroundStyle(Theme.muted)
-                        .frame(width: 78, alignment: .trailing)
-                    }
-                }
-            }
-            NavigationLink {
-                BreakdownView()
-            } label: {
-                HStack(spacing: 5) {
-                    Text("See Full Breakdown")
-                    Image(systemName: "arrow.right")
-                }
-                .font(Theme.font(14, .bold)).foregroundStyle(Theme.accent)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-            }
-            .buttonStyle(.plain)
-            .tapSound()
-        }
-        .cardStyle(tint: Theme.accent)
-    }
 }
 
 #Preview {
