@@ -12,6 +12,9 @@ model/study evals are deterministic given the seed.
 PYTHONPATH="pylib:out/pylib" out/pyenv/bin/python tools/mcat/ablation.py
 PYTHONPATH="pylib:out/pylib" out/pyenv/bin/python tools/mcat/calibration.py
 PYTHONPATH="pylib:out/pylib" out/pyenv/bin/python tools/mcat/perf_eval.py
+PYTHONPATH="pylib:out/pylib" out/pyenv/bin/python tools/mcat/paraphrase_test.py
+PYTHONPATH="pylib:out/pylib" out/pyenv/bin/python tools/mcat/leakage_check.py
+PYTHONPATH="pylib:out/pylib" out/pyenv/bin/python tools/mcat/benchmark.py
 
 # AI features (need OPENAI_API_KEY or the gitignored key file)
 PYTHONPATH="pylib:out/pylib" out/pyenv/bin/python tools/mcat/eval_reasoning.py
@@ -31,6 +34,7 @@ just test-py          # pylib MCAT integration + scoring parity tests
 | **Study feature (ablation)** | application practice vs flashcards-only vs vanilla Anki, equal time | **+8.0 pts** application; feature-off ≈ Anki | yes (vs Anki & feature-off) | `mcat-ablation.md` |
 | **Memory calibration** | predicted vs actual recall | ECE **0.6%**, Brier 0.123 | yes (vs base-rate 0.130) | `mcat-calibration.md` |
 | **Performance model** | predicts held-out question accuracy | MAE **9.7%**, r 0.89, 94.2% coverage | yes (vs 13.9%) | `mcat-performance-eval.md` |
+| **Paraphrase test (7d)** | recall on card vs reworded-question accuracy | recall 88% vs perf **40%** = **48-pt gap** | perf isn't a copy of memory | `tools/mcat/paraphrase_test.py` |
 | **AI reasoning grader** | labels student reasoning sound/…/flawed | **100%** exact-label | yes (vs 55% keyword) | `mcat-ai-note.md` |
 | **AI study coach** | picks the best next action | **100%** focus | yes (vs 75% rule) | `mcat-ai-note.md` |
 | **AI CARS debate** | grounded, engages, doesn't capitulate | all cutoffs met | yes (vs canned) | `mcat-ai-note.md` |
