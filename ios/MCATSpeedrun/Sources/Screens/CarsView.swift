@@ -19,23 +19,40 @@ struct CarsView: View {
     @State private var checked: Set<Int> = []
     @State private var finished = false
 
-    // AI debate state.
-    private enum Role { case student, author }
-    private struct DebateTurn: Identifiable {
+    @Environment(\.dismiss) private var dismiss
+
+    // AI debate state: 4 rounds, one aspect each; win 3 of 4 to clear.
+    private enum RStatus { case locked, active, won, lost }
+    private enum DebStage { case overview, round, review }
+    private struct DebateRound: Identifiable {
         let id = UUID()
-        var role: Role
-        var content: String
-        var critique: String?
-        var skill: String?
+        let aspectKey: String
+        let aspectLabel: String
+        var status: RStatus
+        var rivalClaim = ""
+        var argument = ""
+        var reply = ""
+        var note = ""
     }
-    @State private var debate: [DebateTurn] = []
+    @State private var rounds: [DebateRound] = []
+    @State private var debStage: DebStage = .overview
+    @State private var activeIdx = 0
     @State private var input = ""
     @State private var busy = false
-    @State private var errorText = ""
+    @State private var judged = false
+    @State private var review: (didWell: [String], workOn: [String])?
+
+    private let rivalColor = Color(red: 0.886, green: 0.286, blue: 0.184)
 
     init() {
         _responses = State(initialValue: Array(repeating: "", count: MockData.cars.prompts.count))
     }
+
+    private var wonCount: Int { rounds.filter { $0.status == .won }.count }
+    private var decided: Int {
+        rounds.filter { $0.status == .won || $0.status == .lost }.count
+    }
+    private var cleared: Bool { wonCount >= 3 }
 
     var body: some View {
         ScrollView {
@@ -55,11 +72,15 @@ struct CarsView: View {
             .frame(maxWidth: .infinity)
             .animation(.easeInOut(duration: 0.2), value: revealed)
             .animation(.easeInOut(duration: 0.2), value: finished)
-            .animation(.easeInOut(duration: 0.2), value: debate.count)
+            .animation(.easeInOut(duration: 0.2), value: activeIdx)
+            .animation(.easeInOut(duration: 0.2), value: judged)
         }
         .screenBackground()
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear { SoundManager.shared.start("cars") }
+        .onAppear {
+            SoundManager.shared.start("cars")
+            if app.aiEnabled && rounds.isEmpty { initRounds() }
+        }
     }
 
     // MARK: - Header
@@ -82,10 +103,7 @@ struct CarsView: View {
             Text("PASSAGE")
                 .font(Theme.font(12, .bold))
                 .foregroundStyle(Theme.muted)
-            Text(cars.passage)
-                .font(Theme.font(16))
-                .foregroundStyle(Theme.text)
-                .fixedSize(horizontal: false, vertical: true)
+            MarkdownContent(text: cars.passage, size: 16)
             Rectangle().fill(Theme.border).frame(height: 1).padding(.vertical, 2)
             Text("THE AUTHOR'S CLAIM")
                 .font(Theme.font(11, .bold))
@@ -98,102 +116,187 @@ struct CarsView: View {
         .cardStyle()
     }
 
-    // MARK: - AI debate
+    // MARK: - AI debate (round-based)
 
+    @ViewBuilder
     private var debateSection: some View {
+        switch debStage {
+        case .overview: overviewView
+        case .round: roundView
+        case .review: reviewView
+        }
+    }
+
+    private var overviewView: some View {
         VStack(spacing: 14) {
-            introCard
-            ForEach(debate) { turn in debateBubble(turn) }
-            if busy { thinkingBubble }
-            if !errorText.isEmpty {
-                Text(errorText)
-                    .font(Theme.font(14, .semibold))
-                    .foregroundStyle(Theme.red)
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Debate this passage")
+                    .font(Theme.font(20, .bold)).foregroundStyle(Theme.text)
+                Text("\(rounds.count) rounds · one aspect each")
+                    .font(Theme.font(14)).foregroundStyle(Theme.muted)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                ForEach(Array(rounds.enumerated()), id: \.element.id) { i, r in
+                    Button { enterRound(i) } label: { roundRow(r, i) }
+                        .buttonStyle(.plain)
+                        .disabled(r.status == .locked)
+                }
+                Text("Win 3 of 4 to clear the passage")
+                    .font(Theme.font(13, .bold)).foregroundStyle(Theme.muted)
+                    .frame(maxWidth: .infinity)
             }
-            composer
-            if finished {
-                finishedCard
-            } else {
-                Button("Finish debate") {
-                    finished = true
-                    app.completeActiveLaunch()
+            .cardStyle()
+            Button(decided > 0 ? "Continue" : "Start debate") { enterActive() }
+                .buttonStyle(PrimaryButtonStyle())
+        }
+    }
+
+    private func roundRow(_ r: DebateRound, _ i: Int) -> some View {
+        HStack(spacing: 12) {
+            Circle().fill(statusColor(r).opacity(0.22))
+                .overlay(Circle().stroke(statusColor(r), lineWidth: 1))
+                .frame(width: 26, height: 26)
+            Text(r.aspectLabel).font(Theme.font(16, .bold)).foregroundStyle(Theme.text)
+            Spacer()
+            Text(statusLabel(r, i)).font(Theme.font(13, .bold))
+                .foregroundStyle(statusColor(r))
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 12).fill(Theme.surface))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(
+                    r.status == .active ? Theme.accent : Theme.border,
+                    lineWidth: r.status == .active ? 2 : 1)
+        )
+        .opacity(r.status == .locked ? 0.55 : 1)
+    }
+
+    private var roundView: some View {
+        let r = rounds[activeIdx]
+        return VStack(spacing: 14) {
+            HStack(spacing: 6) {
+                ForEach(Array(rounds.enumerated()), id: \.element.id) { i, rr in
+                    Capsule().fill(segColor(rr.status)).frame(height: 8)
+                        .overlay(
+                            i == activeIdx
+                                ? Capsule().stroke(Theme.accent, lineWidth: 2) : nil)
+                }
+            }
+            HStack {
+                Text("Arguing: \(r.aspectLabel)")
+                    .font(Theme.font(18, .bold)).foregroundStyle(Theme.text)
+                Spacer()
+                Text("Round \(activeIdx + 1) of \(rounds.count)")
+                    .font(Theme.font(13, .bold)).foregroundStyle(Theme.muted)
+            }
+
+            VStack(spacing: 14) {
+                if !r.rivalClaim.isEmpty {
+                    rivalBubble(r.rivalClaim)
+                } else if busy {
+                    rivalBubble("…")
+                }
+                if !r.argument.isEmpty { youBubble(r.argument) }
+                if judged && !r.reply.isEmpty { rivalBubble(r.reply) }
+            }
+
+            if judged {
+                HStack(spacing: 6) {
+                    Text(r.status == .won ? "You won this round" : "Rival won this round")
+                        .font(Theme.font(15, .heavy))
+                        .foregroundStyle(r.status == .won ? Theme.green : Theme.red)
+                    if !r.note.isEmpty {
+                        Text("· \(r.note)").font(Theme.font(13)).foregroundStyle(Theme.muted)
+                    }
+                    Spacer(minLength: 0)
+                }
+                Button(decided >= rounds.count ? "See results" : "Continue") {
+                    continueRound()
                 }
                 .buttonStyle(PrimaryButtonStyle())
-                .disabled(debate.isEmpty)
-                .opacity(debate.isEmpty ? 0.5 : 1)
+            } else {
+                composer
             }
+            Button("← All rounds") { debStage = .overview }
+                .font(Theme.font(13, .bold)).foregroundStyle(Theme.muted).buttonStyle(.plain)
         }
     }
 
-    private var introCard: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Debate the author")
-                .font(Theme.font(16, .bold))
-                .foregroundStyle(Theme.text)
-            Text(
-                "The author will defend their claim using the passage. Challenge it, "
-                    + "defend it, stress-test it — argue in your own words.")
-                .font(Theme.font(14))
-                .foregroundStyle(Theme.muted)
-                .fixedSize(horizontal: false, vertical: true)
+    private func rivalBubble(_ text: String) -> some View {
+        HStack(alignment: .bottom, spacing: 10) {
+            MascotView(size: 40, mood: .neutral, color: rivalColor)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("RIVAL").font(Theme.font(10, .heavy)).foregroundStyle(rivalColor)
+                Text(text).font(Theme.font(15)).foregroundStyle(Theme.text)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(12)
+            .background(RoundedRectangle(cornerRadius: 16).fill(rivalColor.opacity(0.12)))
+            Spacer(minLength: 20)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .cardStyle(tint: Theme.accent)
     }
 
-    private func debateBubble(_ turn: DebateTurn) -> some View {
-        let isAuthor = turn.role == .author
-        return VStack(alignment: .leading, spacing: 8) {
-            Text(isAuthor ? "AUTHOR" : "YOU")
-                .font(Theme.font(11, .heavy))
-                .foregroundStyle(Theme.muted)
-            Text(turn.content)
-                .font(Theme.font(15))
-                .foregroundStyle(Theme.text)
-                .fixedSize(horizontal: false, vertical: true)
-            if let critique = turn.critique, !critique.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Rectangle().fill(Theme.border).frame(height: 1)
-                    HStack(alignment: .top, spacing: 8) {
-                        Text("COACH")
-                            .font(Theme.font(10, .heavy))
-                            .foregroundStyle(Theme.accent)
-                        Text(critique)
-                            .font(Theme.font(13))
-                            .foregroundStyle(Theme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    if let skill = turn.skill, !skill.isEmpty {
-                        Pill(text: skill, color: Theme.accent)
-                    }
+    private func youBubble(_ text: String) -> some View {
+        HStack(alignment: .bottom, spacing: 10) {
+            Spacer(minLength: 20)
+            VStack(alignment: .trailing, spacing: 4) {
+                Text("YOU").font(Theme.font(10, .heavy)).foregroundStyle(.white.opacity(0.85))
+                Text(text).font(Theme.font(15)).foregroundStyle(.white)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(12)
+            .background(RoundedRectangle(cornerRadius: 16).fill(Theme.accent))
+            MascotView(size: 40)
+        }
+    }
+
+    private var reviewView: some View {
+        VStack(spacing: 12) {
+            MascotView(size: 80, mood: cleared ? .happy : .neutral)
+            Text("Won \(wonCount) of \(rounds.count)")
+                .font(Theme.font(24, .heavy)).foregroundStyle(Theme.text)
+            Text(cleared ? "Passage cleared" : "Not cleared — win 3 of 4")
+                .font(Theme.font(15)).foregroundStyle(Theme.muted)
+            if let rev = review {
+                if !rev.didWell.isEmpty {
+                    slipCard(title: "Did well", items: rev.didWell, tint: Theme.green)
+                }
+                if !rev.workOn.isEmpty {
+                    slipCard(title: "Work on", items: rev.workOn, tint: Theme.amber)
+                }
+            } else {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Your coach is reviewing…")
+                        .font(Theme.font(13, .semibold)).foregroundStyle(Theme.muted)
                 }
             }
+            HStack(spacing: 10) {
+                Button("Replay") { initRounds() }.buttonStyle(SecondaryButtonStyle())
+                Button("Done") {
+                    app.completeActiveLaunch()
+                    dismiss()
+                }
+                .buttonStyle(PrimaryButtonStyle())
+            }
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(isAuthor ? Theme.surface : Theme.accent.opacity(0.10))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(isAuthor ? Theme.border : Theme.accent.opacity(0.26), lineWidth: 1)
-        )
+        .frame(maxWidth: .infinity)
     }
 
-    private var thinkingBubble: some View {
-        HStack(spacing: 8) {
-            ProgressView().controlSize(.small)
-            Text("The author is composing a rebuttal…")
-                .font(Theme.font(13, .semibold))
-                .foregroundStyle(Theme.muted)
-            Spacer(minLength: 0)
+    private func slipCard(title: String, items: [String], tint: Color) -> some View {
+        VStack(spacing: 12) {
+            Text(title).font(Theme.font(14, .heavy)).foregroundStyle(tint)
+                .textCase(.uppercase)
+            ForEach(Array(items.enumerated()), id: \.offset) { idx, item in
+                if idx > 0 { Divider() }
+                Text(item).font(Theme.font(18)).foregroundStyle(Theme.text)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 14).fill(Theme.surface))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.border, lineWidth: 1))
+        .frame(maxWidth: .infinity)
+        .cardStyle(tint: tint)
     }
 
     private var composer: some View {
@@ -208,45 +311,136 @@ struct CarsView: View {
                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.border, lineWidth: 1))
                 .overlay(alignment: .topLeading) {
                     if input.isEmpty {
-                        Text("Make your argument…")
+                        Text("Rebut the rival in your own words…")
                             .font(Theme.font(15))
                             .foregroundStyle(Theme.muted)
                             .padding(.horizontal, 13).padding(.vertical, 16)
                             .allowsHitTesting(false)
                     }
                 }
-            Button(busy ? "Sending…" : "Send argument") { sendDebate() }
+            Button(busy ? "Sending…" : "Send") { submitRound() }
                 .buttonStyle(PrimaryButtonStyle())
                 .disabled(busy || input.trimmingCharacters(in: .whitespaces).count < 3)
                 .opacity(busy || input.trimmingCharacters(in: .whitespaces).count < 3 ? 0.5 : 1)
         }
     }
 
-    private func sendDebate() {
-        let msg = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !msg.isEmpty, !busy else { return }
-        busy = true
-        errorText = ""
-        debate.append(DebateTurn(role: .student, content: msg))
-        input = ""
-        let history = debate.map {
-            (role: $0.role == .author ? "author" : "student", content: $0.content)
+    // MARK: - Round helpers + actions
+
+    private func statusColor(_ r: DebateRound) -> Color {
+        switch r.status {
+        case .won: return Theme.green
+        case .lost: return Theme.red
+        case .active: return Theme.accent
+        case .locked: return Theme.muted
         }
-        let passageText = cars.passage
-        let claim = cars.authorClaim
-        Task {
-            let reply = await AIClient.carsDebateReply(
-                passage: passageText, authorClaim: claim, history: history, studentMessage: msg)
-            await MainActor.run {
-                if let r = reply {
-                    debate.append(
-                        DebateTurn(
-                            role: .author, content: r.reply, critique: r.critique, skill: r.skill))
-                } else {
-                    errorText = "The author is thinking… try again in a moment."
+    }
+    private func segColor(_ s: RStatus) -> Color {
+        switch s {
+        case .won: return Theme.green
+        case .lost: return Theme.red
+        case .active: return Theme.accent
+        case .locked: return Theme.track
+        }
+    }
+    private func statusLabel(_ r: DebateRound, _ i: Int) -> String {
+        switch r.status {
+        case .won: return "You won"
+        case .lost: return "Rival won"
+        case .active: return "In progress"
+        case .locked:
+            return rounds.firstIndex(where: { $0.status == .locked }) == i
+                ? "Up next" : "Locked"
+        }
+    }
+
+    private func initRounds() {
+        rounds = AIClient.carsAspects.enumerated().map { i, a in
+            DebateRound(
+                aspectKey: a.key, aspectLabel: a.label, status: i == 0 ? .active : .locked)
+        }
+        debStage = .overview
+        activeIdx = 0
+        judged = false
+        review = nil
+    }
+
+    private func enterActive() {
+        enterRound(rounds.firstIndex(where: { $0.status == .active }) ?? 0)
+    }
+
+    private func enterRound(_ i: Int) {
+        guard rounds.indices.contains(i), rounds[i].status != .locked else { return }
+        activeIdx = i
+        judged = rounds[i].status == .won || rounds[i].status == .lost
+        input = ""
+        debStage = .round
+        if rounds[i].rivalClaim.isEmpty {
+            busy = true
+            let passage = cars.passage
+            let claim = cars.authorClaim
+            let label = rounds[i].aspectLabel
+            Task {
+                let text = await AIClient.carsRoundOpen(
+                    passage: passage, authorClaim: claim, aspectLabel: label)
+                await MainActor.run {
+                    if rounds.indices.contains(i) {
+                        rounds[i].rivalClaim =
+                            text
+                            ?? "My reading of this aspect is the strongest — prove otherwise."
+                    }
+                    busy = false
                 }
+            }
+        }
+    }
+
+    private func submitRound() {
+        let msg = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !msg.isEmpty, !busy, !judged else { return }
+        busy = true
+        let i = activeIdx
+        rounds[i].argument = msg
+        input = ""
+        let passage = cars.passage
+        let label = rounds[i].aspectLabel
+        let claim = rounds[i].rivalClaim
+        Task {
+            let result = await AIClient.carsRoundJudge(
+                passage: passage, aspectLabel: label, rivalClaim: claim, argument: msg)
+            await MainActor.run {
+                if rounds.indices.contains(i) {
+                    rounds[i].reply = result?.reply ?? "The author holds their ground."
+                    rounds[i].note = result?.note ?? ""
+                    rounds[i].status = (result?.won ?? false) ? .won : .lost
+                }
+                judged = true
                 busy = false
             }
+        }
+    }
+
+    private func continueRound() {
+        if let next = rounds.firstIndex(where: { $0.status == .locked }) {
+            rounds[next].status = .active
+        }
+        if decided >= rounds.count {
+            goReview()
+        } else {
+            debStage = .overview
+        }
+    }
+
+    private func goReview() {
+        debStage = .review
+        review = nil
+        let passage = cars.passage
+        let summary = rounds.map {
+            (aspect: $0.aspectLabel, won: $0.status == .won, argument: $0.argument)
+        }
+        Task {
+            let rev = await AIClient.carsReview(passage: passage, rounds: summary)
+            await MainActor.run { review = rev }
         }
     }
 
@@ -374,9 +568,7 @@ struct CarsView: View {
                 Text("Duel complete")
                     .font(Theme.font(16, .bold))
                     .foregroundStyle(Theme.text)
-                Text(app.aiEnabled
-                     ? "You traded \(debate.filter { $0.role == .student }.count) arguments with the author."
-                     : "You checked \(checked.count) of \(cars.rubric.count) rubric points.")
+                Text("You checked \(checked.count) of \(cars.rubric.count) rubric points.")
                     .font(Theme.font(13))
                     .foregroundStyle(Theme.muted)
             }

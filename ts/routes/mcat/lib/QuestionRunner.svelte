@@ -12,7 +12,8 @@ correctness is decided on the backend.
     import { fly } from "svelte/transition";
 
     import { postJson } from "./api";
-    import Icon from "./Icon.svelte";
+    import Content from "./Content.svelte";
+    import Mascot from "./Mascot.svelte";
     import { CONFIDENCE_LABELS, SECTION_NAMES } from "./types";
     import type { FirstPassResponse, QuestionBatch, RevealResult } from "./types";
 
@@ -44,8 +45,18 @@ correctness is decided on the backend.
     let firstResp: FirstPassResponse | null = null;
     let results: RevealResult[] = [];
     let busy = false;
-    // Paginated results review: 5 questions per page with Back/Next.
-    let reviewPage = 0;
+
+    // Review flow: a grid overview, then a per-question walk-through with an
+    // AI concept title + diagram + minimal text (rather than a wall of cards).
+    type ConceptCard = { svg: string | null; title: string | null };
+    let reviewMode = false;
+    let reviewIdx = 0;
+    let showQ = false;
+    // Every question must be looked at (right and wrong) before finishing.
+    let viewed = new Set<number>();
+    let cardByNote: Record<number, ConceptCard> = {};
+    // Note ids whose diagram is currently being generated (drives the loader).
+    let loadingNotes = new Set<number>();
 
     let curChoice = "";
     let curConfidence = "";
@@ -76,8 +87,13 @@ correctness is decided on the backend.
     $: total = batch.questions.length;
     $: q = batch.questions[idx];
     $: progressPct = total ? (idx / total) * 100 : 0;
-    $: pageCount = Math.max(1, Math.ceil(results.length / 5));
-    $: pageItems = results.slice(reviewPage * 5, reviewPage * 5 + 5);
+    $: firstRight = results.filter((r) => r.first_correct).length;
+    $: cur = results[reviewIdx] ?? null;
+    $: curCard = cur ? cardByNote[cur.note_id] : undefined;
+    $: curSvg = curCard?.svg ?? null;
+    $: curTitle = curCard?.title ?? null;
+    $: curLoading = cur ? loadingNotes.has(cur.note_id) : false;
+    $: allViewed = results.length > 0 && results.every((r) => viewed.has(r.note_id));
 
     $: wrongCount = firstResp?.wrong_count ?? 0;
     $: changedCount = countChanged(curChoice, idx, secondAnswers);
@@ -178,12 +194,51 @@ correctness is decided on the backend.
         };
         if (idx + 1 < total) {
             idx += 1;
-            curChoice = secondAnswers[batch.questions[idx].note_id]?.choice ?? "";
-            curReasoning = "";
+            const saved = secondAnswers[batch.questions[idx].note_id];
+            curChoice = saved?.choice ?? "";
+            curReasoning = saved?.reasoning ?? "";
             resetTimer();
         } else {
             await submitSecond();
         }
+    }
+
+    // Go back to the previous question (keeps the current partial answer).
+    function prevFirst(): void {
+        if (idx === 0) {
+            return;
+        }
+        const qNow = batch.questions[idx];
+        if (curChoice) {
+            const elapsed = Date.now() - questionStart;
+            firstAnswers[qNow.note_id] = {
+                choice: curChoice,
+                confidence: curConfidence,
+                time_ms: elapsed,
+                over_time: elapsed > seconds * 1000,
+            };
+        }
+        idx -= 1;
+        const saved = firstAnswers[batch.questions[idx].note_id];
+        curChoice = saved?.choice ?? "";
+        curConfidence = saved?.confidence ?? "";
+        questionStart = Date.now();
+        resetTimer();
+    }
+
+    function prevSecond(): void {
+        if (idx === 0) {
+            return;
+        }
+        secondAnswers[batch.questions[idx].note_id] = {
+            choice: curChoice,
+            reasoning: curReasoning.trim(),
+        };
+        idx -= 1;
+        const saved = secondAnswers[batch.questions[idx].note_id];
+        curChoice = saved?.choice ?? "";
+        curReasoning = saved?.reasoning ?? "";
+        resetTimer();
     }
 
     async function submitSecond(): Promise<void> {
@@ -213,12 +268,99 @@ correctness is decided on the backend.
         return found ? found.question : "";
     }
 
+    function questionChoices(noteId: number): { key: string; text: string }[] {
+        return batch.questions.find((item) => item.note_id === noteId)?.choices ?? [];
+    }
+
     function labelText(label2: string | null | undefined): string {
         return label2 ? label2.replace(/_/g, " ") : "";
     }
 
     function firstPick(noteId: number): string {
         return firstAnswers[noteId]?.choice ?? "";
+    }
+
+    type Verdict = "correct" | "shaky" | "missed";
+    function verdictOf(r: RevealResult): Verdict {
+        const aiv = r.ai_feedback?.verdict;
+        if (r.first_correct) {
+            return aiv === "flawed" || aiv === "partially_sound" ? "shaky" : "correct";
+        }
+        return r.second_correct ? "shaky" : "missed";
+    }
+    const VERDICT_TEXT: Record<Verdict, string> = {
+        correct: "Correct",
+        shaky: "Shaky reasoning",
+        missed: "Missed",
+    };
+
+    async function loadCard(r: RevealResult | null): Promise<void> {
+        if (
+            !aiEnabled ||
+            !r ||
+            r.note_id in cardByNote ||
+            loadingNotes.has(r.note_id)
+        ) {
+            return;
+        }
+        loadingNotes = new Set(loadingNotes).add(r.note_id);
+        try {
+            const resp = await postJson<ConceptCard>("mcatConceptSvg", {
+                note_id: r.note_id,
+            });
+            cardByNote = {
+                ...cardByNote,
+                [r.note_id]: { svg: resp.svg, title: resp.title },
+            };
+        } catch {
+            cardByNote = {
+                ...cardByNote,
+                [r.note_id]: { svg: null, title: null },
+            };
+        } finally {
+            const s = new Set(loadingNotes);
+            s.delete(r.note_id);
+            loadingNotes = s;
+        }
+    }
+
+    function markViewed(i: number): void {
+        const r = results[i];
+        if (r) {
+            viewed = new Set(viewed).add(r.note_id);
+        }
+    }
+    function firstUnviewed(): number {
+        const i = results.findIndex((r) => !viewed.has(r.note_id));
+        return i < 0 ? 0 : i;
+    }
+    function keyLine(r: RevealResult): string {
+        if (r.ai_feedback && (r.ai_feedback.key_point || r.ai_feedback.feedback)) {
+            return r.ai_feedback.key_point || r.ai_feedback.feedback;
+        }
+        return r.explanation ?? "";
+    }
+    function sourceLine(r: RevealResult): string {
+        return r.ai_feedback
+            ? `Source: ${r.ai_feedback.source}`
+            : "Grounded in the official explanation";
+    }
+    function startReview(i: number): void {
+        reviewMode = true;
+        reviewIdx = i;
+        showQ = false;
+        markViewed(i);
+        loadCard(results[i]);
+    }
+    function reviewGo(delta: number): void {
+        const next = reviewIdx + delta;
+        if (next < 0 || next >= results.length) {
+            return;
+        }
+        reviewIdx = next;
+        showQ = false;
+        markViewed(next);
+        loadCard(results[next]);
     }
 </script>
 
@@ -242,7 +384,7 @@ correctness is decided on the backend.
         <div class="qrow">
             {#key idx}
                 <div class="mcat-card question" in:fly={{ x: 24, duration: 240 }}>
-                    <div class="qtext">{q.question}</div>
+                    <div class="qtext"><Content text={q.question} /></div>
                     <div class="choices">
                         {#each q.choices as choice (choice.key)}
                             <label
@@ -256,7 +398,9 @@ correctness is decided on the backend.
                                     bind:group={curChoice}
                                 />
                                 <span class="ck">{choice.key}</span>
-                                <span class="ctext">{choice.text}</span>
+                                <span class="ctext">
+                                    <Content text={choice.text} inline />
+                                </span>
                                 {#if stage === "second" && firstPick(q.note_id) === choice.key}
                                     <span class="firstpick">First pick</span>
                                 {/if}
@@ -303,6 +447,14 @@ correctness is decided on the backend.
                     {/if}
 
                     <div class="actions">
+                        {#if idx > 0}
+                            <button
+                                class="mcat-btn back-btn"
+                                on:click={stage === "first" ? prevFirst : prevSecond}
+                            >
+                                ← Back
+                            </button>
+                        {/if}
                         <button
                             class="mcat-btn mcat-btn-primary"
                             disabled={busy ||
@@ -343,103 +495,206 @@ correctness is decided on the backend.
                 Take Another Look
             </button>
         </div>
-    {:else}
-        <div class="results">
-            <div class="mcat-card rsummary">
-                <div class="rcheck"><Icon name="check" size={40} /></div>
-                <div class="fb-title">Results</div>
-                <p class="mcat-muted">
-                    First-answer correct: {results.filter((r) => r.first_correct)
-                        .length}/{results.length}
-                </p>
-            </div>
-
-            <div class="review-title">
-                Review your answers ({results.length})
-            </div>
-
-            {#each pageItems as r, i (r.note_id)}
-                <div
-                    class="mcat-card result big"
-                    class:good={r.first_correct}
-                    in:fly={{ y: 16, duration: 300, delay: i * 60 }}
-                >
-                    <div class="result-head">
-                        <span class="result-num">
-                            Question {reviewPage * 5 + i + 1} of {results.length}
-                        </span>
-                        <span class="verdict {r.first_correct ? 'g' : 'b'}">
-                            {r.first_correct ? "Correct" : "Missed"}
-                        </span>
-                    </div>
-                    <div class="result-q">{questionById(r.note_id)}</div>
-                    <div class="result-line">
-                        {#if r.second_correct !== undefined}
-                            <span class="rp {r.second_correct ? 'g' : 'b'}">
-                                second try: {r.second_correct ? "correct" : "missed"}
-                            </span>
-                        {/if}
-                        <span class="rp answer">Correct answer: {r.correct}</span>
-                        {#if r.label}<span class="rp">{labelText(r.label)}</span>{/if}
-                    </div>
-                    {#if r.explanation}
-                        <div class="why">
-                            <div class="why-label">
-                                Why {r.first_correct ? "it's right" : "the answer is"}
-                                {r.correct}
-                            </div>
-                            <p class="explanation">{r.explanation}</p>
-                        </div>
-                    {/if}
-                    {#if r.ai_feedback}
-                        <div class="ai-feedback">
-                            <div class="ai-head">
-                                <span class="ai-badge ai-{r.ai_feedback.verdict}">
-                                    {labelText(r.ai_feedback.verdict)}
-                                </span>
-                                <span class="ai-tag">
-                                    Coach feedback on your reasoning
-                                </span>
-                            </div>
-                            <p class="ai-text">{r.ai_feedback.feedback}</p>
-                            {#if r.ai_feedback.key_point}
-                                <p class="ai-key">
-                                    <strong>Key point:</strong>
-                                    {r.ai_feedback.key_point}
-                                </p>
-                            {/if}
-                            <p class="ai-src">Source: {r.ai_feedback.source}</p>
-                        </div>
-                    {/if}
+    {:else if !reviewMode}
+        <div class="results overview">
+            <div class="rv-intro">
+                <Mascot
+                    size={82}
+                    mood={firstRight >= results.length / 2 ? "happy" : "neutral"}
+                />
+                <div class="rv-score">
+                    {firstRight} of {results.length} on first try
                 </div>
-            {/each}
+                <div class="rv-sub">
+                    Let's walk through them together — one at a time.
+                </div>
+            </div>
 
-            {#if pageCount > 1}
-                <div class="pager">
+            <div class="mcat-card rv-grid-card">
+                <div class="rv-grid-title">Tap a question to review</div>
+                <div class="rv-grid">
+                    {#each results as r, i (r.note_id)}
+                        <button
+                            class="tile {verdictOf(r)}"
+                            class:seen={viewed.has(r.note_id)}
+                            in:fly={{ y: 14, duration: 240, delay: i * 35 }}
+                            on:click={() => startReview(i)}
+                        >
+                            <span class="tile-num">{i + 1}</span>
+                            <span class="tile-mark">
+                                {#if viewed.has(r.note_id)}✓{/if}
+                            </span>
+                        </button>
+                    {/each}
+                </div>
+                <div class="rv-legend">
+                    <span class="lg correct">
+                        <i></i>
+                        Correct
+                    </span>
+                    <span class="lg shaky">
+                        <i></i>
+                        Shaky reasoning
+                    </span>
+                    <span class="lg missed">
+                        <i></i>
+                        Missed
+                    </span>
+                </div>
+            </div>
+
+            <div class="rv-cta">
+                {#if allViewed}
+                    <button
+                        class="mcat-btn mcat-btn-primary rv-start"
+                        on:click={() => dispatch("complete", { results })}
+                    >
+                        Go to dashboard
+                    </button>
+                {:else}
+                    <button
+                        class="mcat-btn mcat-btn-primary rv-start"
+                        on:click={() => startReview(firstUnviewed())}
+                    >
+                        {viewed.size > 0 ? "Continue review" : "Start review"}
+                    </button>
+                    <p class="rv-hint">
+                        Review every question — right and wrong — to finish.
+                    </p>
+                {/if}
+            </div>
+        </div>
+    {:else if cur}
+        <div class="results review">
+            {#if showQ}
+                <div class="mcat-card qtakeover" in:fly={{ y: 12, duration: 200 }}>
+                    <div class="qt-label">
+                        Question {reviewIdx + 1} of {results.length}
+                    </div>
+                    <div class="qt-stem">
+                        <Content text={questionById(cur.note_id)} />
+                    </div>
+                    <div class="qt-choices">
+                        {#each questionChoices(cur.note_id) as c (c.key)}
+                            <div
+                                class="qt-choice"
+                                class:correct={c.key === cur.correct}
+                            >
+                                <span class="qt-ck">{c.key}</span>
+                                <span class="qt-text">
+                                    <Content text={c.text} inline />
+                                </span>
+                            </div>
+                        {/each}
+                    </div>
+                    <button
+                        class="mcat-btn mcat-btn-primary qt-back"
+                        on:click={() => (showQ = false)}
+                    >
+                        ← Back to feedback
+                    </button>
+                </div>
+            {:else}
+                <div class="rv-dots">
+                    {#each results as rr, i (rr.note_id)}
+                        <button
+                            class="dot-seg {verdictOf(rr)}"
+                            class:cur={i === reviewIdx}
+                            aria-label={`Question ${i + 1}`}
+                            on:click={() => startReview(i)}
+                        ></button>
+                    {/each}
+                </div>
+
+                {#key reviewIdx}
+                    <div class="mcat-card rv-card" in:fly={{ x: 20, duration: 220 }}>
+                        <div class="rv-card-head">
+                            <span class="verdict-pill {verdictOf(cur)}">
+                                {VERDICT_TEXT[verdictOf(cur)]}
+                            </span>
+                            <span class="rv-count">
+                                {reviewIdx + 1} / {results.length}
+                            </span>
+                            <Mascot
+                                size={40}
+                                mood={verdictOf(cur) === "correct"
+                                    ? "happy"
+                                    : "neutral"}
+                            />
+                        </div>
+
+                        {#if curTitle}
+                            <div class="rv-title">{curTitle}</div>
+                        {/if}
+
+                        {#if aiEnabled && curSvg}
+                            <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                            <div class="rv-svg">{@html curSvg}</div>
+                        {:else if aiEnabled && curLoading}
+                            <div class="rv-svg-loading">
+                                <span class="gen-dots">
+                                    <span></span>
+                                    <span></span>
+                                    <span></span>
+                                </span>
+                                <span class="gen-text">Generating diagram…</span>
+                            </div>
+                        {/if}
+
+                        <div class="rv-answer">
+                            <span class="rp answer">Answer {cur.correct}</span>
+                            {#if cur.label}
+                                <span class="rp">{labelText(cur.label)}</span>
+                            {/if}
+                        </div>
+
+                        {#if keyLine(cur)}
+                            <div class="rv-key"><Content text={keyLine(cur)} /></div>
+                        {/if}
+
+                        <button class="rv-q-toggle" on:click={() => (showQ = true)}>
+                            Show question
+                        </button>
+
+                        <p class="rv-src">{sourceLine(cur)}</p>
+                    </div>
+                {/key}
+
+                <div class="rv-nav">
                     <button
                         class="mcat-btn pager-btn"
-                        disabled={reviewPage === 0}
-                        on:click={() => (reviewPage -= 1)}
+                        disabled={reviewIdx === 0}
+                        on:click={() => reviewGo(-1)}
                     >
                         ← Back
                     </button>
-                    <span class="pager-info">Page {reviewPage + 1} of {pageCount}</span>
-                    <button
-                        class="mcat-btn pager-btn"
-                        disabled={reviewPage >= pageCount - 1}
-                        on:click={() => (reviewPage += 1)}
-                    >
-                        Next →
-                    </button>
+                    {#if reviewIdx < results.length - 1}
+                        <button
+                            class="mcat-btn mcat-btn-primary pager-btn"
+                            on:click={() => reviewGo(1)}
+                        >
+                            Next →
+                        </button>
+                    {:else if allViewed}
+                        <button
+                            class="mcat-btn mcat-btn-primary pager-btn"
+                            on:click={() => dispatch("complete", { results })}
+                        >
+                            Done
+                        </button>
+                    {:else}
+                        <button
+                            class="mcat-btn mcat-btn-primary pager-btn"
+                            on:click={() => startReview(firstUnviewed())}
+                        >
+                            Review remaining
+                        </button>
+                    {/if}
                 </div>
+                <button class="rv-back-all" on:click={() => (reviewMode = false)}>
+                    ← All questions
+                </button>
             {/if}
-
-            <button
-                class="mcat-btn mcat-btn-primary done-btn"
-                on:click={() => dispatch("complete", { results })}
-            >
-                Done
-            </button>
         </div>
     {/if}
 </div>
@@ -635,6 +890,10 @@ correctness is decided on the backend.
     .actions {
         display: flex;
         justify-content: flex-end;
+        gap: 10px;
+    }
+    .back-btn {
+        margin-right: auto;
     }
     .side {
         flex: 0 0 190px;
@@ -697,88 +956,296 @@ correctness is decided on the backend.
     .results {
         display: flex;
         flex-direction: column;
-        gap: 12px;
-    }
-    .rsummary {
-        text-align: center;
-    }
-    .rcheck {
-        width: 64px;
-        height: 64px;
-        margin: 0 auto 12px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
         justify-content: center;
-        color: #fff;
-        background: var(--mcat-green);
-        box-shadow: 0 0 0 8px color-mix(in srgb, var(--mcat-green) 16%, transparent);
-        animation: checkpop 0.5s cubic-bezier(0.2, 0.8, 0.3, 1.3) both;
+        gap: 14px;
+        max-width: 680px;
+        margin: 0 auto;
+        width: 100%;
+        /* Fill the viewport so results aren't stranded above a big blank area. */
+        min-height: calc(100dvh - 170px);
     }
-    @keyframes checkpop {
-        0% {
-            transform: scale(0) rotate(-12deg);
-        }
-        70% {
-            transform: scale(1.12) rotate(3deg);
-        }
-        100% {
-            transform: scale(1) rotate(0);
-        }
+    .rv-intro {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        gap: 4px;
+        padding: 4px 0 2px;
     }
-    @media (prefers-reduced-motion: reduce) {
-        .rcheck {
-            animation: none;
-        }
-    }
-    .review-title {
+    .rv-score {
+        font-size: 24px;
         font-weight: 800;
-        font-size: 16px;
-        margin: 2px 2px 0;
         color: var(--mcat-text);
     }
-    .result.big {
-        padding: 22px 24px;
+    .rv-sub {
+        font-size: 15px;
+        color: var(--mcat-muted);
+        max-width: 32ch;
     }
-    .result-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
+    .rv-grid-card {
+        padding: 18px 18px 16px;
+    }
+    .rv-grid-title {
+        font-size: 15px;
+        font-weight: 800;
+        margin-bottom: 14px;
+    }
+    .rv-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
         gap: 12px;
-        margin-bottom: 10px;
     }
-    .result-num {
+    @media (max-width: 520px) {
+        .rv-grid {
+            grid-template-columns: repeat(4, 1fr);
+        }
+    }
+    .tile {
+        appearance: none;
+        cursor: pointer;
+        border: 1.5px solid transparent;
+        border-radius: 16px;
+        aspect-ratio: 1 / 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        font-weight: 800;
+        transition:
+            transform 0.12s ease,
+            box-shadow 0.12s ease;
+    }
+    .tile:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--mcat-shadow);
+    }
+    .tile-num {
+        font-size: 22px;
+    }
+    .tile-mark {
+        width: 17px;
+        height: 17px;
+        border-radius: 5px;
+        border: 2px solid currentColor;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        font-weight: 900;
+        line-height: 1;
+        opacity: 0.5;
+    }
+    .tile.seen .tile-mark {
+        opacity: 1;
+        background: color-mix(in srgb, currentColor 16%, transparent);
+    }
+    .tile.correct {
+        color: var(--mcat-green);
+        background: color-mix(in srgb, var(--mcat-green) 15%, var(--mcat-surface));
+    }
+    .tile.shaky {
+        color: var(--mcat-amber);
+        background: color-mix(in srgb, var(--mcat-amber) 18%, var(--mcat-surface));
+    }
+    .tile.missed {
+        color: var(--mcat-red);
+        background: color-mix(in srgb, var(--mcat-red) 14%, var(--mcat-surface));
+    }
+    .rv-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        justify-content: center;
+        margin-top: 16px;
         font-size: 13px;
         font-weight: 700;
-        color: var(--mcat-muted);
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
     }
-    .verdict {
+    .lg {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .lg i {
+        width: 12px;
+        height: 12px;
+        border-radius: 4px;
+        border: 2px solid currentColor;
+    }
+    .lg.correct {
+        color: var(--mcat-green);
+    }
+    .lg.shaky {
+        color: var(--mcat-amber);
+    }
+    .lg.missed {
+        color: var(--mcat-red);
+    }
+    .rv-cta {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .rv-hint {
+        margin: 2px 0 0;
+        text-align: center;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--mcat-muted);
+    }
+    .rv-dots {
+        display: flex;
+        gap: 6px;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    .dot-seg {
+        appearance: none;
+        cursor: pointer;
+        border: none;
+        width: 26px;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--mcat-track);
+        opacity: 0.6;
+        transition:
+            opacity 0.12s ease,
+            transform 0.12s ease;
+    }
+    .dot-seg.correct {
+        background: var(--mcat-green);
+    }
+    .dot-seg.shaky {
+        background: var(--mcat-amber);
+    }
+    .dot-seg.missed {
+        background: var(--mcat-red);
+    }
+    .dot-seg.cur {
+        opacity: 1;
+        transform: scaleY(1.5);
+    }
+    .rv-card {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        padding: 20px 22px;
+    }
+    .rv-card-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .verdict-pill {
         font-size: 13px;
         font-weight: 800;
         border-radius: 999px;
         padding: 4px 12px;
     }
-    .verdict.g {
+    .verdict-pill.correct {
         color: var(--mcat-green);
         background: color-mix(in srgb, var(--mcat-green) 14%, var(--mcat-surface));
     }
-    .verdict.b {
+    .verdict-pill.shaky {
+        color: var(--mcat-amber);
+        background: color-mix(in srgb, var(--mcat-amber) 16%, var(--mcat-surface));
+    }
+    .verdict-pill.missed {
         color: var(--mcat-red);
         background: color-mix(in srgb, var(--mcat-red) 14%, var(--mcat-surface));
     }
-    .result-q {
+    .rv-count {
+        font-size: 13px;
         font-weight: 700;
-        font-size: 18px;
-        line-height: 1.5;
-        margin-bottom: 12px;
+        color: var(--mcat-muted);
     }
-    .result-line {
+    .rv-card-head :global(.mascot) {
+        margin-left: auto;
+    }
+    .rv-title {
+        font-size: 21px;
+        font-weight: 800;
+        line-height: 1.3;
+        color: var(--mcat-text);
+    }
+    .rv-q-toggle {
+        align-self: center;
+        appearance: none;
+        border: none;
+        background: none;
+        cursor: pointer;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--mcat-muted);
+        padding: 2px 4px;
+    }
+    .rv-svg {
+        display: flex;
+        justify-content: center;
+        padding: 14px;
+        background: var(--mcat-surface-2);
+        border-radius: 16px;
+        /* SVG uses currentColor for axes/labels so it reads on any theme. */
+        color: var(--mcat-text);
+    }
+    .rv-svg :global(svg) {
+        max-width: 100%;
+        height: auto;
+        max-height: 240px;
+    }
+    .rv-svg-loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        padding: 44px 18px;
+        background: var(--mcat-surface-2);
+        border-radius: 16px;
+    }
+    .gen-dots {
+        display: inline-flex;
+        gap: 7px;
+    }
+    .gen-dots span {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--mcat-accent);
+        animation: genbounce 1s ease-in-out infinite;
+    }
+    .gen-dots span:nth-child(2) {
+        animation-delay: 0.15s;
+    }
+    .gen-dots span:nth-child(3) {
+        animation-delay: 0.3s;
+    }
+    @keyframes genbounce {
+        0%,
+        100% {
+            transform: translateY(0);
+            opacity: 0.4;
+        }
+        40% {
+            transform: translateY(-7px);
+            opacity: 1;
+        }
+    }
+    .gen-text {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--mcat-muted);
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .gen-dots span {
+            animation: none;
+        }
+    }
+    .rv-answer {
         display: flex;
         gap: 8px;
         flex-wrap: wrap;
-        margin-bottom: 12px;
+        justify-content: center;
     }
     .rp {
         font-size: 13px;
@@ -793,52 +1260,103 @@ correctness is decided on the backend.
         border-color: color-mix(in srgb, var(--mcat-accent) 35%, var(--mcat-border));
         font-weight: 700;
     }
-    .rp.g {
-        color: var(--mcat-green);
-        border-color: color-mix(in srgb, var(--mcat-green) 35%, var(--mcat-border));
-    }
-    .rp.b {
-        color: var(--mcat-red);
-        border-color: color-mix(in srgb, var(--mcat-red) 35%, var(--mcat-border));
-    }
-    .why {
-        background: var(--mcat-surface-2);
-        border-radius: 12px;
-        padding: 14px 16px;
-    }
-    .why-label {
-        font-size: 13px;
-        font-weight: 800;
-        color: var(--mcat-text);
-        margin-bottom: 6px;
-    }
-    .explanation {
-        margin: 0;
-        font-size: 16px;
+    .rv-key {
+        margin: 4px 0;
+        font-size: 18px;
         line-height: 1.6;
         color: var(--mcat-text);
+        text-align: center;
     }
-    .pager {
+    .rv-src {
+        margin: 0;
+        text-align: center;
+        font-size: 11px;
+        font-style: italic;
+        color: var(--mcat-muted);
+    }
+    /* Full-page question takeover (from "Show question"). */
+    .qtakeover {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        padding: 24px 26px;
+    }
+    .qt-label {
+        font-size: 13px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--mcat-muted);
+    }
+    .qt-stem {
+        font-size: 21px;
+        font-weight: 700;
+        line-height: 1.55;
+        color: var(--mcat-text);
+    }
+    .qt-choices {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+    .qt-choice {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        gap: 12px;
+        gap: 14px;
+        padding: 16px 18px;
+        border: 1.5px solid var(--mcat-border);
+        border-radius: 14px;
+        font-size: 18px;
+        line-height: 1.45;
+        color: var(--mcat-text);
+    }
+    .qt-choice.correct {
+        border-color: var(--mcat-green);
+        background: color-mix(in srgb, var(--mcat-green) 12%, var(--mcat-surface));
+    }
+    .qt-ck {
+        flex: 0 0 auto;
+        width: 32px;
+        height: 32px;
+        border-radius: 9px;
+        background: var(--mcat-surface-2);
+        border: 1px solid var(--mcat-border);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+        font-size: 16px;
+    }
+    .qt-choice.correct .qt-ck {
+        background: var(--mcat-green);
+        color: #fff;
+        border-color: var(--mcat-green);
+    }
+    .qt-back {
+        align-self: flex-start;
         margin-top: 4px;
     }
+    .rv-nav {
+        display: flex;
+        gap: 10px;
+    }
     .pager-btn {
-        min-width: 110px;
+        flex: 1;
     }
     .pager-btn:disabled {
         opacity: 0.45;
         cursor: not-allowed;
     }
-    .pager-info {
-        font-size: 14px;
+    .rv-back-all {
+        align-self: center;
+        appearance: none;
+        border: none;
+        background: none;
+        cursor: pointer;
+        font: inherit;
+        font-size: 13px;
         font-weight: 700;
         color: var(--mcat-muted);
-    }
-    .done-btn {
-        margin-top: 8px;
     }
     .reasoning {
         display: flex;
@@ -864,58 +1382,5 @@ correctness is decided on the backend.
     .reasoning-input:focus {
         outline: none;
         border-color: var(--accent);
-    }
-    .ai-feedback {
-        margin-top: 12px;
-        padding: 14px;
-        border-radius: 12px;
-        background: color-mix(in srgb, var(--mcat-accent) 7%, var(--mcat-surface));
-        border: 1px solid color-mix(in srgb, var(--mcat-accent) 22%, var(--mcat-border));
-    }
-    .ai-head {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin-bottom: 8px;
-    }
-    .ai-badge {
-        font-size: 11px;
-        font-weight: 800;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        border-radius: 999px;
-        padding: 3px 10px;
-        color: #fff;
-        background: var(--mcat-muted);
-    }
-    .ai-badge.ai-sound {
-        background: var(--mcat-green);
-    }
-    .ai-badge.ai-partially_sound {
-        background: var(--mcat-amber);
-    }
-    .ai-badge.ai-flawed {
-        background: var(--mcat-red);
-    }
-    .ai-tag {
-        font-size: 12px;
-        font-weight: 700;
-        color: var(--mcat-accent);
-    }
-    .ai-text {
-        margin: 0 0 8px;
-        font-size: 15px;
-        color: var(--mcat-text);
-    }
-    .ai-key {
-        margin: 0 0 8px;
-        font-size: 14px;
-        color: var(--mcat-text);
-    }
-    .ai-src {
-        margin: 0;
-        font-size: 12px;
-        color: var(--mcat-muted);
-        font-style: italic;
     }
 </style>

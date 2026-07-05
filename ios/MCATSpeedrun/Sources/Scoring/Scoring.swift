@@ -70,6 +70,56 @@ enum Scoring {
         return !(full.memory.abstained && full.performance.abstained && full.readiness.abstained)
     }
 
+    // MARK: - Section ranking (for the dashboard weakest/strongest popups)
+
+    enum Measure { case memory, performance }
+
+    /// Sections (non-abstained) ranked ascending by the given measure's point.
+    /// Used to name the subjects behind the strongest badge and to point the
+    /// weakest badge at a specific practice. Mirrors the desktop dashboard.
+    static func sectionsRanked(app: AppState, progress: ProgressStore, measure: Measure)
+        -> [(code: SectionCode, point: Double)]
+    {
+        guard let full = fullScores(app: app, progress: progress) else { return [] }
+        var out: [(SectionCode, Double)] = []
+        for code in order {
+            guard let s = full.sections[code.rawValue] else { continue }
+            let block = measure == .memory ? s.memory : s.performance
+            if !block.abstained, let point = block.point { out.append((code, point)) }
+        }
+        return out.sorted { $0.1 < $1.1 }.map { (code: $0.0, point: $0.1) }
+    }
+
+    // MARK: - Practice recommendation (weakest section + flashcards vs problems)
+
+    /// The single "study this next" recommendation from the scores: the weakest
+    /// section and whether flashcards or problems are more needed. Returns nil
+    /// when there's no measured evidence yet (nothing to highlight).
+    static func recommendedAction(app: AppState, progress: ProgressStore)
+        -> (section: SectionCode, action: String)?
+    {
+        guard let full = fullScores(app: app, progress: progress) else { return nil }
+        func pt(_ code: SectionCode, _ measure: String) -> Double? {
+            guard let s = full.sections[code.rawValue] else { return nil }
+            let b = measure == "memory" ? s.memory : s.performance
+            return b.abstained ? nil : b.point
+        }
+        func weakness(_ code: SectionCode) -> Double {
+            let p = pt(code, "performance")
+            return p == nil ? 0.6 : 1 - p! / 100
+        }
+        func action(_ code: SectionCode) -> String {
+            if code == .cars { return "problems" }
+            let m = pt(code, "memory")
+            let p = pt(code, "performance")
+            if let m, let p, m < p - 8 { return "flashcards" }
+            if m != nil, p == nil { return "flashcards" }
+            return "problems"
+        }
+        let weakest = order.max(by: { weakness($0) < weakness($1) }) ?? .bb
+        return (weakest, action(weakest))
+    }
+
     private static func fullScores(app: AppState, progress: ProgressStore) -> FullScores? {
         let json = Engine.scores(
             state: progress.combinedLogJSON(),

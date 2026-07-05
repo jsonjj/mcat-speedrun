@@ -148,15 +148,30 @@ fn external_aggregate_folds_into_scores() {
     let mut external = HashMap::new();
     external.insert(
         "cp".to_string(),
-        SectionCounts { attempts: 20, correct: 12, sets: 2, ..Default::default() },
+        SectionCounts {
+            attempts: 20,
+            correct: 12,
+            sets: 2,
+            ..Default::default()
+        },
     );
     external.insert(
         "ps".to_string(),
-        SectionCounts { attempts: 20, correct: 10, sets: 2, ..Default::default() },
+        SectionCounts {
+            attempts: 20,
+            correct: 10,
+            sets: 2,
+            ..Default::default()
+        },
     );
     external.insert(
         "cars".to_string(),
-        SectionCounts { attempts: 20, correct: 16, sets: 2, ..Default::default() },
+        SectionCounts {
+            attempts: 20,
+            correct: 16,
+            sets: 2,
+            ..Default::default()
+        },
     );
     let scores = state.scores(&uniform_coverage(), &external, None);
     // 14 + 12 + 10 + 16 = 52 of 80 = 65%.
@@ -178,6 +193,38 @@ fn merge_is_union_by_event_id() {
     // Sorted by (ts, id): r1(100), r3(150), r2(200).
     let ids: Vec<&str> = a.reviews.iter().map(|r| r.id.as_str()).collect();
     assert_eq!(ids, ["r1", "r3", "r2"]);
+}
+
+#[test]
+fn merge_is_idempotent() {
+    // Re-applying the same remote log (e.g. a duplicate sync pull) must not
+    // double-count events — the replay-union keys on event id.
+    let mut a = McatState::default();
+    a.add_review("r1", "bb-c1", "bb", 100, 3);
+
+    let mut b = McatState::default();
+    b.add_review("r2", "bb-c2", "bb", 200, 3);
+    b.add_attempt("a1", "bb", "q1", 150, true, "bb-a");
+
+    a.merge(&b);
+    let (reviews, attempts) = (a.reviews.len(), a.attempts.len());
+    a.merge(&b); // second pull of the same data
+    assert_eq!((a.reviews.len(), a.attempts.len()), (reviews, attempts));
+    assert_eq!((reviews, attempts), (2, 1));
+}
+
+#[test]
+fn empty_state_abstains_everything() {
+    // With no evidence at all, the give-up rule fires for every score — the app
+    // must never fabricate a number from nothing.
+    let scores = McatState::default().scores(&uniform_coverage(), &no_external(), None);
+    assert!(scores.memory.abstained);
+    assert!(scores.performance.abstained);
+    assert!(scores.readiness.abstained);
+    assert!(scores.memory.point.is_none());
+    for code in ["bb", "cp", "ps", "cars"] {
+        assert!(scores.sections[code].readiness.abstained, "section {code}");
+    }
 }
 
 #[test]

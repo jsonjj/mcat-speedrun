@@ -36,7 +36,9 @@ of Anki are BSD-3-Clause. Credit to the Anki project.
   `pylib/anki/mcat/.openai_key`, iOS `ios/MCATSpeedrun/Resources/openai_key.txt`).
 - **AI evals** (held-out, each beats a baseline; key from env or the file):
   `PYTHONPATH="pylib:out/pylib" out/pyenv/bin/python tools/mcat/eval_reasoning.py`
-  (and `eval_coach.py`, `eval_cars.py`). See `docs/mcat-ai-note.md`.
+  (and `eval_coach.py`, `eval_cars.py`, plus `eval_injection.py` — a
+  prompt-injection probe with hidden-text source attacks). See
+  `docs/mcat-ai-note.md`.
 - **Give-up rule:** Readiness shows no number unless all four sections have ≥40%
   coverage and ≥2 performance sets, plus ≥100 graded reviews and ≥40 performance
   attempts overall; otherwise it abstains (a broad diagnostic unlocks a labeled

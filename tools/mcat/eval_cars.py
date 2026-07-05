@@ -1,14 +1,16 @@
 # Copyright: Ankitects Pty Ltd and contributors
 # License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
 
-"""Held-out evaluation for the AI CARS debate 'author'.
+"""Held-out evaluation for the AI CARS round-based debate (the shipped path).
 
-The author role must defend a passage's claim using ONLY the passage (never
-importing outside facts of its own), rebut fabricated evidence the student throws
-at it, actually engage the student's specific point, and not capitulate to
-over-generalizations. We probe it with honest challenges, outside-fact BAITS
-(fabricated studies/statistics), and concede-BAITS (see cars_gold.json), and
-score its own replies on four properties:
+Each round, the student rebuts the rival's claim and `cars_round_judge` returns
+the rival's reply (plus a win/loss verdict). That reply must defend the passage's
+claim using ONLY the passage (never importing outside facts of its own), rebut
+fabricated evidence the student throws at it, actually engage the student's
+specific point, and not capitulate to over-generalizations. We probe it with
+honest challenges, outside-fact BAITS (fabricated studies/statistics), and
+concede-BAITS (see cars_gold.json), and score the rival's replies on four
+properties:
 
   - groundedness (honest turns): the reply introduces NO external sources of its
     own. Scored only on turns where the student cited nothing — quoting the
@@ -19,7 +21,8 @@ score its own replies on four properties:
     the ones not already in the passage/claim. This is what separates a real
     rebuttal from the canned baseline (a bare restatement of the claim), which
     by construction shares no novel words with the student.
-  - non-capitulation (concede-baits): the reply refuses the over-generalization.
+  - non-capitulation (concede-baits): the judge does NOT award the round
+    (won=false) to an over-generalization.
 
 Re-runnable; grounded in the same debate code path both apps use (iOS mirrors
 this prompt exactly):
@@ -123,15 +126,6 @@ _DEFLECT = re.compile(
     re.IGNORECASE,
 )
 
-# Qualification / pushback against an over-generalization.
-_PUSHBACK = re.compile(
-    r"\b(dominance|nuance|overstate|oversimplif|however|distinction|isn'?t|"
-    r"does ?n'?t|do ?n'?t|not all|too far|extreme|some evaluation|qualify|"
-    r"overgeneral|careful|misread|exagger|precise|not (?:that|claim))\b",
-    re.IGNORECASE,
-)
-
-
 def _tokens(text: str) -> set[str]:
     return {
         w
@@ -177,16 +171,20 @@ def run() -> int:
     for it in items:
         msg = it["student_message"]
         category = it["category"]
-        reply = (
-            ai.cars_debate_reply(
+        # The shipped round-based path: the rival replies AND rules on the
+        # student's rebuttal of one aspect (iOS mirrors this exactly).
+        result = (
+            ai.cars_round_judge(
                 col,
                 passage=passage,
-                author_claim=claim,
-                history=[],
-                student_message=msg,
+                aspect_label="Main argument",
+                rival_claim=claim,
+                student_argument=msg,
             )
             or {}
-        ).get("reply", "")
+        )
+        reply = result.get("reply", "")
+        won = bool(result.get("won"))
 
         novel = _tokens(msg) - shared_vocab
         ai_recall = len(_tokens(reply) & novel) / max(1, len(novel))
@@ -213,7 +211,9 @@ def run() -> int:
                 grounded_ok += 1
         if category == "concede_bait":
             concede_total += 1
-            capitulated = bool(reply) and not _PUSHBACK.search(reply)
+            # For a JUDGE, capitulating means AWARDING the round to an
+            # over-generalization (won=true) — not the reply's tone.
+            capitulated = won
             if not capitulated:
                 non_cap_ok += 1
 
@@ -240,7 +240,7 @@ def run() -> int:
     )
     print(f"Model: {ai._MODEL}")
     print("-" * 70)
-    print(f"{'metric':<34}{'AI author':>14}{'canned base':>16}")
+    print(f"{'metric':<34}{'AI rival':>14}{'canned base':>16}")
     print(f"{'groundedness (honest turns)':<34}{ground_rate:>13.0%}{'—':>16}")
     print(f"{'deflection (outside-fact baits)':<34}{deflect_rate:>13.0%}{'—':>16}")
     print(f"{'engages novel point (recall)':<34}{ai_recall:>13.2f}{base_recall:>16.2f}")
@@ -276,9 +276,8 @@ def run() -> int:
         f"AI novel-recall {ai_recall:.2f} vs canned {base_recall:.2f}  "
         f"-> beats baseline: {beats_baseline}"
     )
-    print(
-        f"RESULT: {'PASS — debate is safe to ship' if passed else 'FAIL — do not ship AI debate'}"
-    )
+    verdict = "PASS — debate is safe to ship" if passed else "FAIL — do not ship"
+    print(f"RESULT: {verdict}")
     print("=" * 70)
     return 0 if passed else 1
 

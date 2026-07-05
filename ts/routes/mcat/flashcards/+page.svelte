@@ -13,6 +13,7 @@ Memory Recall score.
     import { fly } from "svelte/transition";
 
     import { postJson } from "../lib/api";
+    import Content from "../lib/Content.svelte";
     import Icon from "../lib/Icon.svelte";
     import { playStart } from "../lib/sound";
     import { SECTION_NAMES } from "../lib/types";
@@ -145,11 +146,11 @@ Memory Recall score.
                                 {SECTION_NAMES[section] ?? section}
                             </div>{/if}
                         <div class="fc-label">Question</div>
-                        <div class="fc-text">{card.front}</div>
+                        <div class="fc-text"><Content text={card.front} /></div>
                     </div>
                     <div class="face back mcat-card">
                         <div class="fc-label green">Answer</div>
-                        <div class="fc-text answer">{card.back}</div>
+                        <div class="fc-text answer"><Content text={card.back} /></div>
                     </div>
                 </div>
             {/key}
@@ -182,7 +183,12 @@ Memory Recall score.
 
 <style lang="scss">
     .study {
-        max-width: 720px;
+        max-width: 760px;
+        /* Fill the viewport so the card isn't a small island in blank space. */
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        min-height: calc(100dvh - 130px);
     }
     .study-head {
         display: flex;
@@ -213,10 +219,15 @@ Memory Recall score.
     /* 3D flip scene: the card rotates on its Y axis to reveal the answer. */
     .scene {
         perspective: 1600px;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 320px;
     }
     .card3d {
         position: relative;
-        min-height: 280px;
+        flex: 1;
+        min-height: 320px;
         transform-style: preserve-3d;
         /* Ease with a gentle overshoot near settle for a bit of weight. */
         transition: transform 0.55s cubic-bezier(0.2, 0.75, 0.25, 1);

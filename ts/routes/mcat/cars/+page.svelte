@@ -14,12 +14,15 @@ rate yourself on. Responses + self-rating are stored (AI-ready) for later.
     import { onMount } from "svelte";
 
     import { postJson } from "../lib/api";
+    import Content from "../lib/Content.svelte";
+    import Mascot from "../lib/Mascot.svelte";
     import { playStart } from "../lib/sound";
     import type {
-        CarsDebateReply,
-        CarsDebateResponse,
+        CarsAspect,
         CarsPassage,
         CarsResponse,
+        CarsReview,
+        CarsRoundResult,
         Profile,
     } from "../lib/types";
 
@@ -34,47 +37,156 @@ rate yourself on. Responses + self-rating are stored (AI-ready) for later.
     let blockId: string | null = null;
     let fromRoadmap = false;
 
-    // AI debate mode.
+    // AI debate mode: 4 rounds, one aspect each; win 3 of 4 to clear.
     let aiEnabled = false;
-    type Turn = { role: "student" | "author"; content: string; critique?: string; skill?: string };
-    let debate: Turn[] = [];
+    let aspects: CarsAspect[] = [];
+    type RoundState = {
+        aspect: CarsAspect;
+        status: "locked" | "active" | "won" | "lost";
+        rivalClaim: string;
+        argument: string;
+        reply: string;
+        note: string;
+    };
+    let rounds: RoundState[] = [];
+    let debStage: "overview" | "round" | "review" = "overview";
+    let activeIdx = 0;
     let debateInput = "";
-    let debateBusy = false;
-    let debateError = "";
+    let busy = false;
+    let judged = false;
+    let review: CarsReview | null = null;
 
-    async function sendDebate(): Promise<void> {
-        const msg = debateInput.trim();
-        if (!msg || !passage || debateBusy) {
+    $: wonCount = rounds.filter((r) => r.status === "won").length;
+    $: decided = rounds.filter((r) => r.status === "won" || r.status === "lost").length;
+    $: cleared = wonCount >= 3;
+    $: activeRound = rounds[activeIdx];
+
+    function initRounds(): void {
+        rounds = aspects.map((a, i) => ({
+            aspect: a,
+            status: i === 0 ? "active" : "locked",
+            rivalClaim: "",
+            argument: "",
+            reply: "",
+            note: "",
+        }));
+        debStage = "overview";
+        activeIdx = 0;
+        review = null;
+    }
+
+    function statusLabel(r: RoundState, i: number): string {
+        if (r.status === "won") {
+            return "You won this round";
+        }
+        if (r.status === "lost") {
+            return "Rival won this round";
+        }
+        if (r.status === "active") {
+            return "In progress";
+        }
+        return i === rounds.findIndex((x) => x.status === "locked")
+            ? "Up next"
+            : "Locked";
+    }
+
+    function enterActive(): void {
+        const i = rounds.findIndex((r) => r.status === "active");
+        enterRound(i < 0 ? 0 : i);
+    }
+
+    async function enterRound(i: number): Promise<void> {
+        if (!passage || i < 0 || rounds[i].status === "locked") {
             return;
         }
-        debateBusy = true;
-        debateError = "";
-        debate = [...debate, { role: "student", content: msg }];
+        activeIdx = i;
+        judged = rounds[i].status === "won" || rounds[i].status === "lost";
         debateInput = "";
-        try {
-            const history = debate.map((t) => ({
-                role: t.role === "author" ? "author" : "student",
-                content: t.content,
-            }));
-            const resp = await postJson<CarsDebateResponse>("mcatCarsDebate", {
-                passage: passage.passage,
-                author_claim: passage.author_claim,
-                history,
-                student_message: msg,
-            });
-            const r: CarsDebateReply | null = resp.reply;
-            if (r) {
-                debate = [
-                    ...debate,
-                    { role: "author", content: r.reply, critique: r.critique, skill: r.skill },
-                ];
-            } else {
-                debateError = "The author is thinking… try again in a moment.";
+        debStage = "round";
+        if (!rounds[i].rivalClaim) {
+            busy = true;
+            try {
+                const resp = await postJson<{ claim: string | null }>(
+                    "mcatCarsRoundOpen",
+                    {
+                        passage: passage.passage,
+                        author_claim: passage.author_claim,
+                        aspect_label: rounds[i].aspect.label,
+                    },
+                );
+                rounds[i].rivalClaim =
+                    resp.claim ??
+                    "My reading of this aspect is the strongest one — prove otherwise.";
+                rounds = rounds;
+            } finally {
+                busy = false;
             }
-        } catch {
-            debateError = "Couldn't reach your coach. Check your connection.";
+        }
+    }
+
+    async function submitRound(): Promise<void> {
+        const msg = debateInput.trim();
+        if (!passage || !msg || busy || judged) {
+            return;
+        }
+        busy = true;
+        const i = activeIdx;
+        rounds[i].argument = msg;
+        rounds = rounds;
+        try {
+            const resp = await postJson<{ result: CarsRoundResult | null }>(
+                "mcatCarsRoundJudge",
+                {
+                    passage: passage.passage,
+                    aspect_label: rounds[i].aspect.label,
+                    rival_claim: rounds[i].rivalClaim,
+                    argument: msg,
+                },
+            );
+            const r = resp.result;
+            rounds[i].reply = r?.reply ?? "The author holds their ground.";
+            rounds[i].note = r?.note ?? "";
+            rounds[i].status = r?.won ? "won" : "lost";
+            judged = true;
+            debateInput = "";
+            rounds = rounds;
         } finally {
-            debateBusy = false;
+            busy = false;
+        }
+    }
+
+    async function continueRound(): Promise<void> {
+        const next = rounds.findIndex((r) => r.status === "locked");
+        if (next >= 0) {
+            rounds[next].status = "active";
+            rounds = rounds;
+        }
+        if (decided >= rounds.length) {
+            await goReview();
+        } else {
+            debStage = "overview";
+        }
+    }
+
+    async function goReview(): Promise<void> {
+        debStage = "review";
+        review = null;
+        try {
+            const resp = await postJson<{ review: CarsReview | null }>(
+                "mcatCarsReview",
+                {
+                    passage: passage?.passage ?? "",
+                    rounds: rounds.map((r) => ({
+                        aspect: r.aspect.label,
+                        won: r.status === "won",
+                        argument: r.argument,
+                        note: r.note,
+                    })),
+                },
+            );
+            review = resp.review;
+        } catch {
+            review = null;
         }
     }
 
@@ -93,6 +205,10 @@ rate yourself on. Responses + self-rating are stored (AI-ready) for later.
         passage = resp.passage;
         rubric = resp.rubric ?? [];
         rubricChecks = rubric.map(() => false);
+        aspects = resp.debate_aspects ?? [];
+        if (aiEnabled && aspects.length) {
+            initRounds();
+        }
         loading = false;
     }
 
@@ -130,7 +246,16 @@ rate yourself on. Responses + self-rating are stored (AI-ready) for later.
         try {
             const missTypes = rubric.filter((_r, i) => !rubricChecks[i]);
             const payloadResponses = aiEnabled
-                ? { debate: debate.map((t) => `${t.role}: ${t.content}`).join("\n") }
+                ? {
+                      debate: rounds
+                          .map(
+                              (r) =>
+                                  `[${r.aspect.label}] rival: ${r.rivalClaim} | you: ${r.argument} | result: ${r.status}`,
+                          )
+                          .join("\n"),
+                      won: wonCount,
+                      total: rounds.length,
+                  }
                 : responses;
             await postJson("mcatSubmitCars", {
                 note_id: passage.note_id,
@@ -186,87 +311,184 @@ rate yourself on. Responses + self-rating are stored (AI-ready) for later.
     {:else}
         <div class="mcat-card passage">
             <div class="passage-label mcat-muted">Passage</div>
-            <p class="passage-text">{passage.passage}</p>
+            <div class="passage-text"><Content text={passage.passage} /></div>
         </div>
 
         {#if aiEnabled}
-            <div class="mcat-card debate-intro">
-                <div class="feedback-title">Debate the author</div>
-                <p class="mcat-muted">
-                    The author will defend their claim using the passage. Challenge
-                    it, defend it, stress-test it — argue in your own words.
-                </p>
-                <p class="author-claim"><strong>Author's claim:</strong> {passage.author_claim}</p>
-            </div>
-
-            <div class="debate">
-                {#each debate as turn, i (i)}
-                    <div class="turn turn-{turn.role}">
-                        <div class="turn-who">
-                            {turn.role === "author" ? "Author" : "You"}
-                        </div>
-                        <p class="turn-text">{turn.content}</p>
-                        {#if turn.critique}
-                            <div class="turn-critique">
-                                <span class="crit-tag">Coach</span>
-                                {turn.critique}
-                                {#if turn.skill}<span class="skill-chip">{turn.skill}</span>{/if}
+            {#if debStage === "review"}
+                <div class="review-wrap">
+                    <Mascot size={82} mood={cleared ? "happy" : "neutral"} />
+                    <div class="review-score">Won {wonCount} of {rounds.length}</div>
+                    <div class="review-sub mcat-muted">
+                        {cleared ? "Passage cleared" : "Not cleared — win 3 of 4"}
+                    </div>
+                    {#if review}
+                        {#if review.did_well.length}
+                            <div class="mcat-card slip did">
+                                <div class="slip-title">Did well</div>
+                                {#each review.did_well as d (d)}
+                                    <div class="slip-item">{d}</div>
+                                {/each}
                             </div>
                         {/if}
+                        {#if review.work_on.length}
+                            <div class="mcat-card slip work">
+                                <div class="slip-title">Work on</div>
+                                {#each review.work_on as w (w)}
+                                    <div class="slip-item">{w}</div>
+                                {/each}
+                            </div>
+                        {/if}
+                    {:else}
+                        <p class="mcat-muted">Your coach is reviewing the debate…</p>
+                    {/if}
+                    <div class="row center">
+                        {#if fromRoadmap}
+                            <button
+                                class="mcat-btn mcat-btn-primary"
+                                disabled={saving}
+                                on:click={() => finish(() => goto("/mcat/roadmap"))}
+                            >
+                                {saving ? "Saving…" : "Finish & back to roadmap"}
+                            </button>
+                        {:else}
+                            <button
+                                class="mcat-btn"
+                                disabled={saving}
+                                on:click={() => finish(load)}
+                            >
+                                Next passage
+                            </button>
+                            <button
+                                class="mcat-btn mcat-btn-primary"
+                                disabled={saving}
+                                on:click={() => finish(() => goto("/mcat/dashboard"))}
+                            >
+                                Done
+                            </button>
+                        {/if}
                     </div>
-                {/each}
-                {#if debateBusy}
-                    <div class="turn turn-author"><p class="turn-text mcat-muted">…</p></div>
-                {/if}
-            </div>
+                </div>
+            {:else if debStage === "round" && activeRound}
+                <div class="rounds-bar">
+                    {#each rounds as r, i (r.aspect.key)}
+                        <span
+                            class="rseg {r.status}"
+                            class:cur={i === activeIdx}
+                        ></span>
+                    {/each}
+                </div>
+                <div class="round-head">
+                    <span class="round-aspect">
+                        Arguing: {activeRound.aspect.label}
+                    </span>
+                    <span class="round-count mcat-muted">
+                        Round {activeIdx + 1} of {rounds.length}
+                    </span>
+                </div>
 
-            {#if debateError}<p class="debate-err">{debateError}</p>{/if}
+                <div class="chat">
+                    {#if activeRound.rivalClaim}
+                        <div class="msg rival">
+                            <div class="avatar">
+                                <Mascot size={40} color="#e2492f" mood="neutral" />
+                            </div>
+                            <div class="bubble rival-bubble">
+                                <div class="who rival-who">Rival</div>
+                                <p>{activeRound.rivalClaim}</p>
+                            </div>
+                        </div>
+                    {:else if busy}
+                        <div class="msg rival">
+                            <div class="avatar">
+                                <Mascot size={40} color="#e2492f" mood="neutral" />
+                            </div>
+                            <div class="bubble rival-bubble">
+                                <p class="mcat-muted">…</p>
+                            </div>
+                        </div>
+                    {/if}
 
-            <div class="debate-compose">
-                <textarea
-                    rows="3"
-                    bind:value={debateInput}
-                    placeholder="Make your argument…"
-                    disabled={debateBusy}
-                ></textarea>
-                <button
-                    class="mcat-btn mcat-btn-primary"
-                    disabled={debateBusy || debateInput.trim().length < 3}
-                    on:click={sendDebate}
-                >
-                    {debateBusy ? "…" : "Send"}
-                </button>
-            </div>
+                    {#if activeRound.argument}
+                        <div class="msg you">
+                            <div class="bubble you-bubble">
+                                <div class="who you-who">You</div>
+                                <p>{activeRound.argument}</p>
+                            </div>
+                            <div class="avatar"><Mascot size={40} /></div>
+                        </div>
+                    {/if}
 
-            <div class="row">
-                {#if fromRoadmap}
-                    <button
-                        class="mcat-btn mcat-btn-primary"
-                        disabled={saving || debate.length === 0}
-                        on:click={() => finish(() => goto("/mcat/roadmap"))}
-                    >
-                        {saving ? "Saving…" : "Finish & back to roadmap"}
+                    {#if judged && activeRound.reply}
+                        <div class="msg rival">
+                            <div class="avatar">
+                                <Mascot size={40} color="#e2492f" mood="neutral" />
+                            </div>
+                            <div class="bubble rival-bubble">
+                                <div class="who rival-who">Rival</div>
+                                <p>{activeRound.reply}</p>
+                            </div>
+                        </div>
+                    {/if}
+                </div>
+
+                {#if judged}
+                    <div class="verdict-line {activeRound.status}">
+                        {activeRound.status === "won"
+                            ? "You won this round"
+                            : "Rival won this round"}
+                        {#if activeRound.note}
+                            <span class="verdict-note">· {activeRound.note}</span>
+                        {/if}
+                    </div>
+                    <button class="mcat-btn mcat-btn-primary" on:click={continueRound}>
+                        {decided >= rounds.length ? "See results" : "Continue"}
                     </button>
                 {:else}
-                    <button
-                        class="mcat-btn mcat-btn-primary"
-                        disabled={saving || debate.length === 0}
-                        on:click={() => finish(() => goto("/mcat/dashboard"))}
-                    >
-                        {saving ? "Saving…" : "Finish debate"}
-                    </button>
-                    <button
-                        class="mcat-btn"
-                        disabled={saving}
-                        on:click={() => {
-                            debate = [];
-                            finish(load);
-                        }}
-                    >
-                        Another passage
-                    </button>
+                    <div class="compose">
+                        <textarea
+                            rows="3"
+                            bind:value={debateInput}
+                            placeholder="Rebut the rival in your own words…"
+                            disabled={busy}
+                        ></textarea>
+                        <button
+                            class="mcat-btn mcat-btn-primary"
+                            disabled={busy || debateInput.trim().length < 3}
+                            on:click={submitRound}
+                        >
+                            {busy ? "…" : "Send"}
+                        </button>
+                    </div>
                 {/if}
-            </div>
+                <button class="link-btn" on:click={() => (debStage = "overview")}>
+                    ← All rounds
+                </button>
+            {:else}
+                <div class="mcat-card overview">
+                    <div class="ov-title">Debate this passage</div>
+                    <div class="ov-sub mcat-muted">
+                        {rounds.length} rounds · one aspect each
+                    </div>
+                    <div class="rounds-list">
+                        {#each rounds as r, i (r.aspect.key)}
+                            <button
+                                class="round-row {r.status}"
+                                disabled={r.status === "locked"}
+                                on:click={() => enterRound(i)}
+                            >
+                                <span class="rr-dot {r.status}"></span>
+                                <span class="rr-name">{r.aspect.label}</span>
+                                <span class="rr-status">{statusLabel(r, i)}</span>
+                            </button>
+                        {/each}
+                    </div>
+                    <div class="ov-foot">Win 3 of 4 to clear the passage</div>
+                </div>
+                <button class="mcat-btn mcat-btn-primary" on:click={enterActive}>
+                    {decided > 0 ? "Continue" : "Start debate"}
+                </button>
+            {/if}
         {:else if !revealed}
             <div class="prompts">
                 {#each textPrompts as prompt, i (i)}
@@ -510,76 +732,266 @@ rate yourself on. Responses + self-rating are stored (AI-ready) for later.
         margin-top: 16px;
         flex-wrap: wrap;
     }
-    .debate-intro {
+    .row.center {
+        justify-content: center;
+    }
+    /* Round-based debate */
+    .rounds-bar {
+        display: flex;
+        gap: 6px;
         margin-bottom: 14px;
     }
-    .author-claim {
-        margin: 8px 0 0;
-        font-size: 15px;
+    .rseg {
+        flex: 1;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--mcat-track);
     }
-    .debate {
+    .rseg.won {
+        background: var(--mcat-green);
+    }
+    .rseg.lost {
+        background: var(--mcat-red);
+    }
+    .rseg.active {
+        background: var(--mcat-accent);
+    }
+    .rseg.cur {
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--mcat-accent) 40%, transparent);
+    }
+    .round-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+    .round-aspect {
+        font-size: 18px;
+        font-weight: 800;
+        color: var(--mcat-text);
+    }
+    .round-count {
+        font-size: 13px;
+        font-weight: 700;
+    }
+    .chat {
         display: flex;
         flex-direction: column;
-        gap: 12px;
+        gap: 14px;
         margin-bottom: 14px;
     }
-    .turn {
-        border-radius: 12px;
-        padding: 12px 14px;
-        max-width: 90%;
+    .msg {
+        display: flex;
+        align-items: flex-end;
+        gap: 10px;
+        max-width: 92%;
     }
-    .turn-student {
+    .msg.you {
         align-self: flex-end;
-        background: color-mix(in srgb, var(--mcat-accent) 12%, var(--mcat-surface));
-        border: 1px solid color-mix(in srgb, var(--mcat-accent) 26%, var(--mcat-border));
     }
-    .turn-author {
+    .msg.rival {
         align-self: flex-start;
-        background: var(--mcat-surface);
-        border: 1px solid var(--mcat-border);
     }
-    .turn-who {
-        font-size: 12px;
-        font-weight: 800;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        color: var(--mcat-muted);
-        margin-bottom: 4px;
+    .avatar {
+        flex: 0 0 auto;
     }
-    .turn-text {
+    .bubble {
+        border-radius: 16px;
+        padding: 12px 15px;
+    }
+    .bubble p {
         margin: 0;
         font-size: 15px;
         line-height: 1.55;
     }
-    .turn-critique {
-        margin-top: 10px;
-        padding-top: 8px;
-        border-top: 1px dashed var(--mcat-border);
-        font-size: 13px;
-        color: var(--mcat-muted);
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        flex-wrap: wrap;
+    .rival-bubble {
+        background: color-mix(in srgb, #e2492f 12%, var(--mcat-surface));
+        border: 1px solid color-mix(in srgb, #e2492f 24%, var(--mcat-border));
+        border-bottom-left-radius: 4px;
     }
-    .crit-tag {
+    .you-bubble {
+        background: var(--mcat-accent);
+        color: #fff;
+        border-bottom-right-radius: 4px;
+    }
+    .who {
         font-size: 11px;
         font-weight: 800;
         text-transform: uppercase;
-        color: var(--mcat-accent);
+        letter-spacing: 0.04em;
+        margin-bottom: 4px;
     }
-    .debate-compose {
+    .rival-who {
+        color: #e2492f;
+    }
+    .you-who {
+        color: rgba(255, 255, 255, 0.85);
+    }
+    .verdict-line {
+        font-size: 15px;
+        font-weight: 800;
+        margin-bottom: 12px;
+    }
+    .verdict-line.won {
+        color: var(--mcat-green);
+    }
+    .verdict-line.lost {
+        color: var(--mcat-red);
+    }
+    .verdict-note {
+        font-weight: 600;
+        color: var(--mcat-muted);
+    }
+    .compose {
         display: flex;
         gap: 10px;
         align-items: flex-end;
     }
-    .debate-compose textarea {
+    .compose textarea {
         flex: 1;
     }
-    .debate-err {
-        color: var(--mcat-red);
+    .link-btn {
+        appearance: none;
+        border: none;
+        background: none;
+        cursor: pointer;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--mcat-muted);
+        margin-top: 12px;
+        padding: 0;
+    }
+    /* Overview */
+    .overview {
+        margin-bottom: 14px;
+    }
+    .ov-title {
+        font-size: 20px;
+        font-weight: 800;
+    }
+    .ov-sub {
         font-size: 14px;
-        font-weight: 600;
-        margin: 0 0 10px;
+        margin-top: 2px;
+    }
+    .rounds-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin: 14px 0;
+    }
+    .round-row {
+        appearance: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        width: 100%;
+        text-align: left;
+        border: 1.5px solid var(--mcat-border);
+        border-radius: 12px;
+        background: var(--mcat-surface);
+        padding: 14px 16px;
+        color: var(--mcat-text);
+    }
+    .round-row.active {
+        border-color: var(--mcat-accent);
+        box-shadow: 0 0 0 1px var(--mcat-accent);
+    }
+    .round-row:disabled {
+        opacity: 0.55;
+        cursor: default;
+    }
+    .rr-dot {
+        flex: 0 0 auto;
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        background: var(--mcat-surface-2);
+        border: 1px solid var(--mcat-border);
+    }
+    .rr-dot.won {
+        background: color-mix(in srgb, var(--mcat-green) 22%, var(--mcat-surface));
+        border-color: var(--mcat-green);
+    }
+    .rr-dot.lost {
+        background: color-mix(in srgb, var(--mcat-red) 22%, var(--mcat-surface));
+        border-color: var(--mcat-red);
+    }
+    .rr-dot.active {
+        background: color-mix(in srgb, var(--mcat-accent) 22%, var(--mcat-surface));
+        border-color: var(--mcat-accent);
+    }
+    .rr-name {
+        font-weight: 800;
+        font-size: 16px;
+    }
+    .rr-status {
+        margin-left: auto;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--mcat-muted);
+    }
+    .round-row.active .rr-status {
+        color: var(--mcat-accent);
+    }
+    .round-row.won .rr-status {
+        color: var(--mcat-green);
+    }
+    .ov-foot {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--mcat-muted);
+        text-align: center;
+    }
+    /* Review */
+    .review-wrap {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        text-align: center;
+    }
+    .review-score {
+        font-size: 24px;
+        font-weight: 800;
+        color: var(--mcat-text);
+    }
+    .review-sub {
+        font-size: 15px;
+        margin-top: -6px;
+    }
+    .slip {
+        width: 100%;
+        text-align: center;
+    }
+    .slip.did {
+        border-left: 4px solid var(--mcat-green);
+    }
+    .slip.work {
+        border-left: 4px solid var(--mcat-amber);
+    }
+    .slip-title {
+        font-size: 14px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 12px;
+    }
+    .slip.did .slip-title {
+        color: var(--mcat-green);
+    }
+    .slip.work .slip-title {
+        color: var(--mcat-amber);
+    }
+    .slip-item {
+        font-size: 18px;
+        line-height: 1.55;
+        padding: 12px 0;
+        color: var(--mcat-text);
+    }
+    .slip-item + .slip-item {
+        border-top: 1px solid var(--mcat-border);
     }
 </style>

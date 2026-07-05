@@ -12,8 +12,7 @@ struct DashboardView: View {
 
     @State private var showMastery = false
     @State private var draft: Double = 80
-    @State private var coach: CoachRecommendation?
-    @State private var coachLoading = false
+    @State private var infoKind: ScoreKind?
 
     private var model: DashboardModel { Scoring.model(app: app, progress: progress) }
 
@@ -25,7 +24,6 @@ struct DashboardView: View {
                 togglesRow
                 if app.isDev { devMasteryButton }
                 if !app.diagnosticDone { diagnosticPrompt }
-                if let coach { coachCard(coach) }
 
                 ringSection
 
@@ -52,79 +50,124 @@ struct DashboardView: View {
         .screenBackground()
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showMastery) { masterySheet }
-        .onAppear { loadCoachIfNeeded() }
-        .onChange(of: app.aiEnabled) { _, _ in
-            coach = nil
-            loadCoachIfNeeded()
+    }
+
+    // MARK: - Score badges (Weakest / Strongest / Not enough data)
+
+    private struct Badge {
+        enum Kind { case weakest, strongest, nodata }
+        var kind: Kind
+        var label: String
+        var text: String
+    }
+
+    private func toneRank(_ b: ScoreBlock) -> Int {
+        switch b.tone {
+        case .green: return 2
+        case .amber: return 1
+        case .red: return 0
         }
     }
 
-    // MARK: - AI study coach
+    /// Highlight the weakest/strongest score by evidence strength (matching the
+    /// card colors), plus "Not enough data" on abstained ones. The popups name
+    /// the subjects behind the decision (strongest) or the specific practice to
+    /// do next (weakest). No AI — computed straight from the scores.
+    private var badges: [ScoreKind: Badge] {
+        var out: [ScoreKind: Badge] = [:]
+        let m = model
+        if m.readiness.abstained {
+            out[.readiness] = Badge(
+                kind: .nodata, label: "Not enough data",
+                text: "Not enough reviews yet to project a score.")
+        }
+        var measurable: [(ScoreKind, Int, Double)] = []
+        if m.memory.abstained {
+            out[.memory] = Badge(
+                kind: .nodata, label: "Not enough data",
+                text: "Do some flashcards to measure recall.")
+        } else {
+            measurable.append((.memory, toneRank(m.memory), m.memory.point ?? 0))
+        }
+        if m.performance.abstained {
+            out[.performance] = Badge(
+                kind: .nodata, label: "Not enough data",
+                text: "Do a question set to measure applied accuracy.")
+        } else {
+            measurable.append((.performance, toneRank(m.performance), m.performance.point ?? 0))
+        }
+        if measurable.count == 2 {
+            measurable.sort { ($0.1, $0.2) < ($1.1, $1.2) }
+            out[measurable[1].0] = strongestBadge(measurable[1].0)
+            out[measurable[0].0] = weakestBadge(measurable[0].0)
+        }
+        return out
+    }
 
-    private func coachCard(_ rec: CoachRecommendation) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 10).fill(
-                    LinearGradient(
-                        colors: [Theme.accent, Theme.accent2],
-                        startPoint: .topLeading, endPoint: .bottomTrailing))
-                Image(systemName: "target")
-                    .font(Theme.font(18, .bold))
-                    .foregroundStyle(.white)
+    private func measure(for kind: ScoreKind) -> Scoring.Measure {
+        kind == .memory ? .memory : .performance
+    }
+
+    private func strongestBadge(_ kind: ScoreKind) -> Badge {
+        let ranked = Scoring.sectionsRanked(
+            app: app, progress: progress, measure: measure(for: kind))
+        let top = ranked.suffix(2).reversed().map { $0.code.word }
+        let text = top.isEmpty
+            ? "Your strongest area so far."
+            : "Strongest: " + top.joined(separator: ", ") + "."
+        return Badge(kind: .strongest, label: "Strongest", text: text)
+    }
+
+    private func weakestBadge(_ kind: ScoreKind) -> Badge {
+        let ranked = Scoring.sectionsRanked(
+            app: app, progress: progress, measure: measure(for: kind))
+        guard let weak = ranked.first else {
+            return Badge(
+                kind: .weakest, label: "Weakest",
+                text: "Your weakest area — study here next.")
+        }
+        let name = weak.code.word
+        let practice = kind == .memory ? "\(name) flashcards" : "\(name) problems"
+        let text = app.allDone
+            ? "Weakest: \(name). Practice \(practice) next."
+            : "Weakest: \(name). Finish today's path to unlock practice."
+        return Badge(kind: .weakest, label: "Weakest", text: text)
+    }
+
+    private func badgeColor(_ k: Badge.Kind) -> Color {
+        switch k {
+        case .weakest: return Theme.red
+        case .strongest: return Theme.green
+        case .nodata: return Theme.muted
+        }
+    }
+
+    private func infoBinding(_ k: ScoreKind) -> Binding<Bool> {
+        Binding(get: { infoKind == k }, set: { infoKind = $0 ? k : nil })
+    }
+
+    @ViewBuilder
+    private func badgeView(_ kind: ScoreKind) -> some View {
+        if let b = badges[kind] {
+            Button { infoKind = kind } label: {
+                HStack(spacing: 5) {
+                    Text(b.label).font(Theme.font(11, .heavy))
+                    Image(systemName: "info.circle.fill").font(.system(size: 11))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 10).padding(.vertical, 4)
+                .background(Capsule().fill(badgeColor(b.kind)))
+                .shadow(color: .black.opacity(0.18), radius: 4, y: 2)
             }
-            .frame(width: 40, height: 40)
-
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
-                    Text("YOUR AI COACH")
-                        .font(Theme.font(11, .heavy))
-                        .foregroundStyle(Theme.accent)
-                    if let word = sectionWord(rec.section) {
-                        Pill(text: word, color: Theme.muted)
-                    }
-                }
-                if !rec.headline.isEmpty {
-                    Text(rec.headline)
-                        .font(Theme.font(17, .bold))
-                        .foregroundStyle(Theme.text)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if !rec.detail.isEmpty {
-                    Text(rec.detail)
-                        .font(Theme.font(14))
-                        .foregroundStyle(Theme.text)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Text("Source: \(rec.source)")
-                    .font(Theme.font(12)).italic()
-                    .foregroundStyle(Theme.muted)
-            }
-            Spacer(minLength: 0)
-        }
-        .cardStyle(tint: Theme.accent)
-    }
-
-    private func sectionWord(_ code: String) -> String? {
-        SectionCode(rawValue: code)?.word
-    }
-
-    /// Fetch the coach when AI is on, a key is present, and there's evidence to
-    /// coach on. Fail-safe + non-blocking: any failure leaves the card hidden.
-    private func loadCoachIfNeeded() {
-        guard app.aiEnabled, AIClient.available,
-            Scoring.hasEvidence(app: app, progress: progress)
-        else {
-            coach = nil
-            return
-        }
-        guard !coachLoading else { return }
-        coachLoading = true
-        let facts = Scoring.coachFactsJSON(app: app, progress: progress)
-        Task {
-            let rec = await AIClient.coachRecommendation(factsJSON: facts)
-            await MainActor.run {
-                coach = rec
-                coachLoading = false
+            .buttonStyle(.plain)
+            .offset(x: 12, y: -10)
+            .popover(isPresented: infoBinding(kind)) {
+                Text(b.text)
+                    .font(Theme.font(14, .semibold))
+                    .foregroundStyle(Theme.text)
+                    .padding(14)
+                    .frame(width: 240)
+                    .presentationCompactAdaptation(.popover)
             }
         }
     }
@@ -269,6 +312,7 @@ struct DashboardView: View {
         }
         .buttonStyle(.plain)
         .tapSound()
+        .overlay(alignment: .topLeading) { badgeView(kind) }
     }
 
     // MARK: - Score estimate

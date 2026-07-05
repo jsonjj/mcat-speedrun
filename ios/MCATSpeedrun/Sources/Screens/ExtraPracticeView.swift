@@ -5,9 +5,15 @@ import SwiftUI
 
 struct ExtraPracticeView: View {
     @EnvironmentObject var app: AppState
+    @EnvironmentObject var progress: ProgressStore
     @State private var locked = false
     @State private var heroIn = false
     @State private var seal = false
+
+    // "Study this next" recommendation from the scores (weakest section's action).
+    private var rec: (section: SectionCode, action: String)? {
+        app.allDone ? Scoring.recommendedAction(app: app, progress: progress) : nil
+    }
 
     var body: some View {
         ScrollView {
@@ -116,7 +122,8 @@ struct ExtraPracticeView: View {
             } label: {
                 PracticeOptionRow(
                     icon: "bolt.fill", tint: Theme.accent,
-                    title: "Mini-MCAT", subtitle: "12 mixed questions, timed"
+                    title: "Mini-MCAT", subtitle: "12 mixed questions, timed",
+                    recommended: rec?.action == "problems"
                 )
             }
             .buttonStyle(.plain)
@@ -130,7 +137,8 @@ struct ExtraPracticeView: View {
                 } label: {
                     PracticeOptionRow(
                         icon: "rectangle.stack.fill", tint: Theme.cyan,
-                        title: "Flashcards", subtitle: "Spaced-recall review"
+                        title: "Flashcards", subtitle: "Spaced-recall review",
+                        recommended: rec?.action == "flashcards"
                     )
                 }
                 .buttonStyle(.plain)
@@ -240,6 +248,7 @@ private struct PracticeOptionRow: View {
     let tint: Color
     let title: String
     let subtitle: String
+    var recommended: Bool = false
 
     var body: some View {
         HStack(spacing: 14) {
@@ -257,6 +266,13 @@ private struct PracticeOptionRow: View {
             }
 
             Spacer(minLength: 8)
+
+            if recommended {
+                Text("Recommended")
+                    .font(Theme.font(11, .heavy)).foregroundStyle(Theme.accent)
+                    .padding(.horizontal, 9).padding(.vertical, 4)
+                    .background(Capsule().fill(Theme.accent.opacity(0.14)))
+            }
 
             Image(systemName: "chevron.right")
                 .font(Theme.font(14, .bold))

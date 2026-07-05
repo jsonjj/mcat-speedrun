@@ -141,14 +141,12 @@ struct FlashcardsView: View {
                 Text(label).font(Theme.font(12, .bold)).foregroundStyle(labelColor)
             }
             Spacer(minLength: 12)
-            Text(text)
-                .font(Theme.font(big ? 22 : 19, big ? .bold : .semibold))
-                .foregroundStyle(Theme.text)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
+            MarkdownContent(
+                text: text, size: big ? 22 : 19,
+                weight: big ? .bold : .semibold, centered: true)
             Spacer(minLength: 12)
         }
-        .frame(minHeight: 220)
+        .frame(minHeight: 340)
         .cardStyle()
     }
 

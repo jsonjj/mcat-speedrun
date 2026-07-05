@@ -61,6 +61,7 @@ export interface DashboardData {
     profile: Profile;
     streak: Streak;
     scores: Scores | null;
+    free_practice_unlocked?: boolean;
 }
 
 export interface Choice {
@@ -182,9 +183,15 @@ export interface CarsPassage {
     prompt_skills: string[];
 }
 
+export interface CarsAspect {
+    key: string;
+    label: string;
+}
+
 export interface CarsResponse {
     passage: CarsPassage | null;
     rubric: string[];
+    debate_aspects?: CarsAspect[];
 }
 
 export interface CarsDebateReply {
@@ -197,6 +204,20 @@ export interface CarsDebateReply {
 export interface CarsDebateResponse {
     ai_enabled: boolean;
     reply: CarsDebateReply | null;
+}
+
+// Round-based debate (4 aspects, win 3/4).
+export interface CarsRoundResult {
+    won: boolean;
+    reply: string;
+    note: string;
+    source: string;
+}
+
+export interface CarsReview {
+    did_well: string[];
+    work_on: string[];
+    source: string;
 }
 
 export const SECTION_NAMES: Record<string, string> = {

@@ -82,6 +82,11 @@ def mcat_dashboard() -> bytes:
         "profile": _public(store.get_profile(col)),
         "streak": store.get_streak(col),
         "scores": scoring.compute_scores(col) if has_content else None,
+        "free_practice_unlocked": (
+            planner.required_complete(planner.get_or_build_plan(col))
+            if has_content
+            else False
+        ),
     }
     return _json(payload)
 
@@ -298,17 +303,14 @@ def mcat_mini_questions() -> bytes:
     )
 
 
-def mcat_flashcards() -> bytes:
-    """Memory cards to review, DUE ones first (spaced repetition). Due-ness comes
-    from the shared engine's FSRS state over the merged log, so a card reviewed on
-    the phone won't resurface here until it's due (and vice-versa)."""
+def _due_flashcards(col: Any, section: str | None, count: int) -> list[dict[str, Any]]:
+    """Serialized memory cards for a section, DUE ones first (spaced repetition).
+    Due-ness comes from the shared engine's FSRS state over the merged log, so a
+    card reviewed on the phone won't resurface until it's due (and vice-versa)."""
     import anki.notes
 
-    body = _body()
-    col = _col()
-    section = body.get("section")
-    count = int(body.get("count", 15))
-
+    if count <= 0:
+        return []
     nids = questions.memory_note_ids(col, section=section)
     key_to_nid: dict[str, int] = {}
     all_keys: list[str] = []
@@ -339,48 +341,64 @@ def mcat_flashcards() -> bytes:
     random.shuffle(due_nids)
     random.shuffle(rest_nids)
     chosen = (due_nids + rest_nids)[:count]
-    cards = [questions.serialize_flashcard(col, nid) for nid in chosen]
-    return _json({"cards": cards})
+    return [questions.serialize_flashcard(col, nid) for nid in chosen]
 
 
-def mcat_grade_card() -> bytes:
-    """Grade a memory card with an FSRS rating so it schedules + feeds Memory."""
+def mcat_flashcards() -> bytes:
+    """Memory cards to review, DUE ones first (spaced repetition)."""
+    body = _body()
+    col = _col()
+    section = body.get("section")
+    count = int(body.get("count", 15))
+    return _json({"cards": _due_flashcards(col, section, count)})
+
+
+def _grade_card_by_id(
+    col: Any, card_id: int, rating_name: str
+) -> tuple[bool, str, int]:
+    """Answer a memory card with an FSRS rating: schedules it AND logs the review
+    into the shared-engine event log (so per-card state + Memory sync per-card).
+    Returns (ok, error, rating_int)."""
     import anki.cards
     from anki.scheduler.v3 import CardAnswer
 
-    body = _body()
-    col = _col()
-    card_id = int(body.get("card_id", 0) or 0)
     ratings = {
         "again": CardAnswer.AGAIN,
         "hard": CardAnswer.HARD,
         "good": CardAnswer.GOOD,
         "easy": CardAnswer.EASY,
     }
-    rating = ratings.get(str(body.get("rating", "good")).lower(), CardAnswer.GOOD)
-    ok = True
-    error = ""
-    if card_id:
-        try:
-            card = col.get_card(anki.cards.CardId(card_id))
-            card.start_timer()
-            states = col._backend.get_scheduling_states(card.id)
-            answer = col.sched.build_answer(card=card, states=states, rating=rating)
-            col.sched.answer_card(answer)
-            # Record the review into the shared-engine event log (card key +
-            # rating), so per-card FSRS state + the Memory score sync per-card.
-            note = card.note()
-            section = note["Section"] if "Section" in note else ""
-            front = note["Front"] if "Front" in note else ""
-            store.append_review_event(
-                col,
-                card_key=store.mcat_card_key("m", section, front),
-                section=section,
-                rating=int(rating),
-            )
-        except Exception as err:
-            ok = False
-            error = str(err)
+    rating = ratings.get(str(rating_name).lower(), CardAnswer.GOOD)
+    if not card_id:
+        return False, "no card id", int(rating)
+    try:
+        card = col.get_card(anki.cards.CardId(card_id))
+        card.start_timer()
+        states = col._backend.get_scheduling_states(card.id)
+        answer = col.sched.build_answer(card=card, states=states, rating=rating)
+        col.sched.answer_card(answer)
+        note = card.note()
+        section = note["Section"] if "Section" in note else ""
+        front = note["Front"] if "Front" in note else ""
+        store.append_review_event(
+            col,
+            card_key=store.mcat_card_key("m", section, front),
+            section=section,
+            rating=int(rating),
+        )
+        return True, "", int(rating)
+    except Exception as err:
+        return False, str(err), int(rating)
+
+
+def mcat_grade_card() -> bytes:
+    """Grade a memory card with an FSRS rating so it schedules + feeds Memory."""
+    body = _body()
+    col = _col()
+    card_id = int(body.get("card_id", 0) or 0)
+    ok, error, _rating = _grade_card_by_id(
+        col, card_id, str(body.get("rating", "good"))
+    )
     if ok:
         firebase_sync.push(col)  # sync the review promptly (best-effort)
     return _json({"ok": ok, "error": error})
@@ -546,6 +564,26 @@ def mcat_submit_second() -> bytes:
     return _json(
         {"reveal": True, "batch_id": batch_id, "results": results, "ai_enabled": ai_on}
     )
+
+
+def mcat_concept_svg() -> bytes:
+    """AI concept card for one question's review: a short concept title + a tiny
+    diagram (SVG), grounded in its official explanation. Returns {svg, title}
+    (both null when AI is off or generation fails — the review then just shows
+    the mascot + text). One cached AI call per question."""
+    col = _col()
+    if not ai.enabled(col):
+        return _json({"svg": None, "title": None})
+    body = _body()
+    note_id = int(body.get("note_id", 0) or 0)
+    if not note_id:
+        return _json({"svg": None, "title": None})
+    meta = questions.serialize_question(col, note_id)
+    reveal = questions.reveal_payload(col, note_id)
+    card = ai.concept_card(
+        col, question=meta["question"], explanation=reveal.get("explanation", "")
+    )
+    return _json({"svg": card["svg"], "title": card["title"]})
 
 
 def mcat_complete_diagnostic() -> bytes:
@@ -818,6 +856,7 @@ def mcat_cars() -> bytes:
                 "prompt_skills": enrich.get("prompt_skills", []),
             },
             "rubric": _CARS_RUBRIC,
+            "debate_aspects": ai.CARS_ASPECTS,
         }
     )
 
@@ -855,6 +894,51 @@ def mcat_cars_debate() -> bytes:
     return _json({"ai_enabled": True, "reply": reply})
 
 
+def mcat_cars_round_open() -> bytes:
+    """The rival's opening claim for one debate round (a passage aspect)."""
+    col = _col()
+    if not ai.enabled(col):
+        return _json({"claim": None})
+    body = _body()
+    claim = ai.cars_round_open(
+        col,
+        passage=str(body.get("passage", "")),
+        author_claim=str(body.get("author_claim", "")),
+        aspect_label=str(body.get("aspect_label", "")),
+    )
+    return _json({"claim": claim})
+
+
+def mcat_cars_round_judge() -> bytes:
+    """Judge one debate round: {result:{won,reply,note}|null}."""
+    col = _col()
+    if not ai.enabled(col):
+        return _json({"result": None})
+    body = _body()
+    result = ai.cars_round_judge(
+        col,
+        passage=str(body.get("passage", "")),
+        aspect_label=str(body.get("aspect_label", "")),
+        rival_claim=str(body.get("rival_claim", "")),
+        student_argument=str(body.get("argument", "")),
+    )
+    return _json({"result": result})
+
+
+def mcat_cars_review() -> bytes:
+    """End-of-passage coach review: {review:{did_well,work_on}|null}."""
+    col = _col()
+    if not ai.enabled(col):
+        return _json({"review": None})
+    body = _body()
+    review = ai.cars_review(
+        col,
+        passage=str(body.get("passage", "")),
+        rounds=body.get("rounds", []),
+    )
+    return _json({"review": review})
+
+
 # Registry
 #############################################################################
 
@@ -876,6 +960,7 @@ MCAT_POST_HANDLERS = [
     mcat_diagnostic_questions,
     mcat_submit_first,
     mcat_submit_second,
+    mcat_concept_svg,
     mcat_complete_diagnostic,
     mcat_roadmap,
     mcat_rebuild_roadmap,
@@ -887,4 +972,7 @@ MCAT_POST_HANDLERS = [
     mcat_cars,
     mcat_submit_cars,
     mcat_cars_debate,
+    mcat_cars_round_open,
+    mcat_cars_round_judge,
+    mcat_cars_review,
 ]

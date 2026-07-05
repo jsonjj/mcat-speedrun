@@ -70,22 +70,48 @@ struct BreakdownView: View {
     // MARK: - Total
 
     private var totalCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Total · 472–528 Scale")
-                .font(Theme.font(14, .bold))
-                .foregroundStyle(Theme.muted)
-            Text(model.readiness.abstained ? "—" : "\(model.estLow) – \(model.estHigh)")
-                .font(Theme.font(40, .heavy))
-                .foregroundStyle(Theme.accent)
-            if !model.readiness.abstained {
+        // The total is simply the sum of the section ranges once all four have an
+        // estimate (mirrors the desktop breakdown) — independent of the overall
+        // readiness abstention gate.
+        let ready = model.sections.filter { !$0.abstained }
+        let allReady = model.sections.count == 4 && ready.count == 4
+        let low = ready.reduce(0) { $0 + Int($1.low.rounded()) }
+        let high = ready.reduce(0) { $0 + Int($1.high.rounded()) }
+        let mid = (low + high) / 2
+
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                Text("Total · 472–528 Scale")
+                    .font(Theme.font(14, .bold))
+                    .foregroundStyle(Theme.accent)
+                Spacer()
+                Text(allReady ? "\(low) – \(high)" : "—")
+                    .font(Theme.font(28, .heavy))
+                    .foregroundStyle(allReady ? Theme.accent : Theme.muted)
+            }
+
+            // Always show the range bar + numeric scale (grey stub before all four
+            // sections have an estimate), matching the per-section cards.
+            VStack(spacing: 6) {
                 RangeBarView(
                     lo: 472, hi: 528,
-                    low: Double(model.estLow),
-                    high: Double(model.estHigh),
-                    point: Double((model.estLow + model.estHigh) / 2),
-                    color: Theme.accent
+                    low: allReady ? Double(low) : 472,
+                    high: allReady ? Double(high) : 472,
+                    point: allReady ? Double(mid) : 472,
+                    color: allReady ? Theme.accent : Theme.muted
                 )
-            } else {
+                HStack {
+                    Text("472")
+                    Spacer()
+                    Text("500")
+                    Spacer()
+                    Text("528")
+                }
+                .font(Theme.font(11, .semibold))
+                .foregroundStyle(Theme.muted)
+            }
+
+            if !allReady {
                 Text("Complete more study to unlock a total range.")
                     .font(Theme.font(13, .semibold))
                     .foregroundStyle(Theme.muted)

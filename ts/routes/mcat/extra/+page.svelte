@@ -15,7 +15,7 @@ blocks are complete, so the highest-value work always comes first.
     import DailyDiagnostic from "../lib/DailyDiagnostic.svelte";
     import Icon from "../lib/Icon.svelte";
     import { SECTION_NAMES } from "../lib/types";
-    import type { Profile, RoadmapResponse } from "../lib/types";
+    import type { DashboardData, Profile, RoadmapResponse, Scores } from "../lib/types";
 
     const SECTIONS = ["bb", "cp", "ps", "cars"];
 
@@ -24,6 +24,40 @@ blocks are complete, so the highest-value work always comes first.
     let phase = "";
     let aiEnabled = false;
     let lastDiagDate: string | null = null;
+    let scores: Scores | null = null;
+
+    // Lightweight "study this next" recommendation, straight from the scores:
+    // the weakest section, and whether flashcards or problems are more needed.
+    type Measure = "memory" | "performance";
+    function pt(code: string, measure: Measure): number | null {
+        const sec = scores?.sections[code];
+        if (!sec) {
+            return null;
+        }
+        const b = measure === "memory" ? sec.memory : sec.performance;
+        return b && !b.abstained && b.point != null ? b.point : null;
+    }
+    function actionFor(code: string): "flashcards" | "problems" {
+        if (code === "cars") {
+            return "problems";
+        }
+        const m = pt(code, "memory");
+        const p = pt(code, "performance");
+        if (m != null && p != null && m < p - 8) {
+            return "flashcards";
+        }
+        if (m != null && p == null) {
+            return "flashcards";
+        }
+        return "problems";
+    }
+    function weakness(code: string): number {
+        const p = pt(code, "performance");
+        return p == null ? 0.6 : 1 - p / 100;
+    }
+    $: weakestCode = scores
+        ? SECTIONS.reduce((a, b) => (weakness(b) > weakness(a) ? b : a))
+        : null;
 
     function localDay(d: Date): string {
         const y = d.getFullYear();
@@ -46,6 +80,14 @@ blocks are complete, so the highest-value work always comes first.
             lastDiagDate = p.profile.last_diagnostic_date ?? null;
         } catch {
             aiEnabled = false;
+        }
+        if (unlocked) {
+            try {
+                const d = await postJson<DashboardData>("mcatDashboard");
+                scores = d.scores;
+            } catch {
+                scores = null;
+            }
         }
         loading = false;
     }
@@ -93,12 +135,19 @@ blocks are complete, so the highest-value work always comes first.
             {#each SECTIONS as code, i (code)}
                 <div
                     class="card"
+                    class:weakest={code === weakestCode}
                     style={`--c:${SECTION_COLOR[code]};--t:${textColor(SECTION_COLOR[code])};--i:${i}`}
                 >
-                    <div class="card-name">{SECTION_NAMES[code] ?? code}</div>
+                    <div class="card-top">
+                        <div class="card-name">{SECTION_NAMES[code] ?? code}</div>
+                        {#if code === weakestCode}
+                            <span class="weak-badge">Weakest</span>
+                        {/if}
+                    </div>
                     <div class="card-actions">
                         <button
                             class="opt"
+                            class:rec={actionFor(code) === "problems"}
                             on:click={() =>
                                 goto(
                                     code === "cars"
@@ -107,14 +156,21 @@ blocks are complete, so the highest-value work always comes first.
                                 )}
                         >
                             {code === "cars" && aiEnabled ? "Debate" : "Problems"}
+                            {#if actionFor(code) === "problems"}
+                                <span class="rec-tag">Recommended</span>
+                            {/if}
                         </button>
                         {#if code !== "cars" && phase !== "final"}
                             <button
                                 class="opt"
+                                class:rec={actionFor(code) === "flashcards"}
                                 on:click={() =>
                                     goto(`/mcat/flashcards?section=${code}`)}
                             >
                                 Flashcards
+                                {#if actionFor(code) === "flashcards"}
+                                    <span class="rec-tag">Recommended</span>
+                                {/if}
                             </button>
                         {/if}
                     </div>
@@ -329,9 +385,31 @@ blocks are complete, so the highest-value work always comes first.
         animation: rise 0.5s cubic-bezier(0.2, 0.8, 0.3, 1) both;
         animation-delay: calc(var(--i, 0) * 70ms + 0.12s);
     }
+    .card.weakest {
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.16),
+            0 0 0 2px rgba(255, 255, 255, 0.55),
+            0 12px 26px -12px color-mix(in srgb, var(--c) 60%, transparent);
+    }
+    .card-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+    }
     .card-name {
         font-weight: 800;
         font-size: 21px;
+    }
+    .weak-badge {
+        font-size: 11px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        background: rgba(255, 255, 255, 0.28);
+        color: var(--t);
+        border-radius: 999px;
+        padding: 3px 10px;
     }
     .card-actions {
         display: flex;
@@ -352,5 +430,18 @@ blocks are complete, so the highest-value work always comes first.
     }
     .opt:hover {
         background: rgba(255, 255, 255, 0.34);
+    }
+    .opt.rec {
+        background: rgba(255, 255, 255, 0.92);
+        color: #1f2340;
+    }
+    .rec-tag {
+        display: inline-block;
+        margin-left: 8px;
+        font-size: 10px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        color: #7c3aed;
     }
 </style>

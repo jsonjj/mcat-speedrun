@@ -21,6 +21,8 @@ struct QuestionRunnerView: View {
     private let diagnosticKind: String?
 
     private enum Stage { case first, feedback, second, results }
+    private enum Verdict { case correct, shaky, missed }
+    private struct ConceptCard { var title: String?; var svg: String? }
 
     @State private var stage: Stage = .first
     @State private var idx = 0
@@ -28,6 +30,7 @@ struct QuestionRunnerView: View {
     @State private var confidence: ConfidenceLevel? = nil
     // Answers are keyed by position in `items` (questions may repeat).
     @State private var firstChoices: [Int: Int] = [:]
+    @State private var firstConfidence: [Int: ConfidenceLevel] = [:]
     @State private var secondChoices: [Int: Int] = [:]
     @State private var didSecondPass = false
     @State private var timeLeft: Int
@@ -37,12 +40,18 @@ struct QuestionRunnerView: View {
     @State private var reasoning: [Int: String] = [:]
     @State private var aiFeedback: [Int: AiFeedback] = [:]
     @State private var aiGrading = false
-    // Drives the results check-pop + staggered result cards.
-    @State private var celebrate = false
-    // Overtime pulse, pacing tally (questions past the limit), and review paging.
+    // Overtime pulse + pacing tally (questions past the limit).
     @State private var pulse = false
     @State private var slowCount = 0
-    @State private var reviewPage = 0
+    // Review flow: a grid overview, then a per-question walk-through with an AI
+    // concept title + diagram (WKWebView) + minimal text.
+    @State private var reviewMode = false
+    @State private var reviewIdx = 0
+    @State private var showQ = false
+    // Every question must be looked at (right and wrong) before finishing.
+    @State private var viewed: Set<Int> = []
+    @State private var cards: [Int: ConceptCard] = [:]
+    @State private var cardLoading: Set<Int> = []
 
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
@@ -117,7 +126,7 @@ struct QuestionRunnerView: View {
                                 .foregroundStyle(Theme.muted)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        submitButton
+                        actionRow
                     case .feedback:
                         feedbackCard
                     case .results:
@@ -227,11 +236,7 @@ struct QuestionRunnerView: View {
     private func questionCard(_ q: Question) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Pill(text: q.section.abbr, color: sectionColor(q.section))
-            Text(q.stem)
-                .font(Theme.font(18, .semibold))
-                .foregroundStyle(Theme.text)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
+            MarkdownContent(text: q.stem, size: 18, weight: .semibold)
         }
         .cardStyle()
     }
@@ -257,7 +262,7 @@ struct QuestionRunnerView: View {
                     .frame(width: 28, height: 28)
                     .background(RoundedRectangle(cornerRadius: 8).fill(isSel ? Theme.accent : Theme.surface2))
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(isSel ? Theme.accent : Theme.border, lineWidth: 1))
-                Text(choice.text)
+                Text(mcatMarkdownAttr(choice.text))
                     .font(Theme.font(16))
                     .foregroundStyle(Theme.text)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -338,6 +343,16 @@ struct QuestionRunnerView: View {
 
     // MARK: - Submit
 
+    private var actionRow: some View {
+        HStack(spacing: 10) {
+            if idx > 0 {
+                Button("← Back") { goBack() }
+                    .buttonStyle(SecondaryButtonStyle())
+            }
+            submitButton
+        }
+    }
+
     private var submitButton: some View {
         let secondReady =
             !aiActive || (reasoning[idx]?.trimmingCharacters(in: .whitespaces).count ?? 0) >= 3
@@ -349,6 +364,23 @@ struct QuestionRunnerView: View {
         .buttonStyle(PrimaryButtonStyle())
         .disabled(!ready)
         .opacity(ready ? 1 : 0.5)
+    }
+
+    // Go back to the previous question, keeping the current partial answer.
+    private func goBack() {
+        guard idx > 0 else { return }
+        if stage == .first {
+            firstChoices[idx] = selected
+            firstConfidence[idx] = confidence
+            idx -= 1
+            selected = firstChoices[idx]
+            confidence = firstConfidence[idx]
+        } else {
+            secondChoices[idx] = selected
+            idx -= 1
+            selected = secondChoices[idx]
+        }
+        resetTimer()
     }
 
     // MARK: - Feedback (between passes)
@@ -377,202 +409,297 @@ struct QuestionRunnerView: View {
         .cardStyle()
     }
 
-    // MARK: - Results
-
-    private var pageCount: Int { max(1, (total + 4) / 5) }
-    private var pageStart: Int { reviewPage * 5 }
-    private var pageEnd: Int { min(pageStart + 5, total) }
+    // MARK: - Results (grid overview → per-question walk-through)
 
     private var resultsView: some View {
-        VStack(spacing: 12) {
-            summaryCard
-
-            Text("Review your answers (\(total))")
-                .font(Theme.font(16, .heavy))
-                .foregroundStyle(Theme.text)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            ForEach(Array(pageStart..<pageEnd), id: \.self) { i in
-                resultCard(i)
-                    .opacity(celebrate ? 1 : 0)
-                    .offset(y: celebrate ? 0 : 18)
-                    .animation(
-                        .spring(response: 0.5, dampingFraction: 0.85)
-                            .delay(0.1 + Double(i - pageStart) * 0.06),
-                        value: celebrate)
-            }
-
-            if pageCount > 1 { pager }
-
-            Button("Done") {
-                reportComplete()
-                dismiss()
-            }
-            .buttonStyle(PrimaryButtonStyle())
+        Group {
+            if reviewMode { reviewWalkthrough } else { reviewOverview }
         }
-        .onAppear { celebrate = true }
     }
 
-    private var summaryCard: some View {
-        VStack(spacing: 10) {
-            ZStack {
-                Circle().fill(Theme.green).frame(width: 64, height: 64)
-                    .overlay(
-                        Circle().stroke(Theme.green.opacity(0.18), lineWidth: 8)
-                            .scaleEffect(1.25))
-                Image(systemName: "checkmark")
-                    .font(.system(size: 30, weight: .bold))
-                    .foregroundStyle(.white)
+    private func verdict(_ i: Int) -> Verdict {
+        let firstOK = firstChoices[i] == items[i].correct
+        if firstOK {
+            if let v = aiFeedback[i]?.verdict, v == "flawed" || v == "partially_sound" {
+                return .shaky
             }
-            .scaleEffect(celebrate ? 1 : 0.2)
-            .opacity(celebrate ? 1 : 0)
-            .animation(.spring(response: 0.5, dampingFraction: 0.55), value: celebrate)
-            Text("Results").font(Theme.font(20, .bold)).foregroundStyle(Theme.text)
-            Text("First-answer correct: \(firstCorrectCount)/\(total)")
-                .font(Theme.font(15, .semibold))
-                .foregroundStyle(Theme.muted)
+            return .correct
+        }
+        if didSecondPass && secondChoices[i] == items[i].correct { return .shaky }
+        return .missed
+    }
+    private func verdictColor(_ v: Verdict) -> Color {
+        switch v {
+        case .correct: return Theme.green
+        case .shaky: return Theme.amber
+        case .missed: return Theme.red
+        }
+    }
+    private func verdictText(_ v: Verdict) -> String {
+        switch v {
+        case .correct: return "Correct"
+        case .shaky: return "Shaky reasoning"
+        case .missed: return "Missed"
+        }
+    }
+
+    private var allViewed: Bool {
+        !items.isEmpty && items.indices.allSatisfy { viewed.contains($0) }
+    }
+    private func firstUnviewed() -> Int {
+        items.indices.first { !viewed.contains($0) } ?? 0
+    }
+    private func keyText(_ i: Int) -> String {
+        if let fb = aiFeedback[i], !(fb.keyPoint.isEmpty && fb.feedback.isEmpty) {
+            return fb.keyPoint.isEmpty ? fb.feedback : fb.keyPoint
+        }
+        return items[i].explanation
+    }
+    private func sourceText(_ i: Int) -> String {
+        if let fb = aiFeedback[i] { return "Source: \(fb.source)" }
+        return "Grounded in the official explanation"
+    }
+
+    // Overview: mascot summary + a tap-to-review grid + legend.
+    private var reviewOverview: some View {
+        VStack(spacing: 16) {
+            VStack(spacing: 4) {
+                MascotView(size: 82, mood: firstCorrectCount * 2 >= total ? .happy : .neutral)
+                Text("\(firstCorrectCount) of \(total) on first try")
+                    .font(Theme.font(24, .heavy)).foregroundStyle(Theme.text)
+                Text("Let's walk through them together — one at a time.")
+                    .font(Theme.font(15)).foregroundStyle(Theme.muted)
+                    .multilineTextAlignment(.center)
+            }
+
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Tap a question to review")
+                    .font(Theme.font(15, .heavy)).foregroundStyle(Theme.text)
+                LazyVGrid(
+                    columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 5),
+                    spacing: 12
+                ) {
+                    ForEach(items.indices, id: \.self) { i in
+                        Button { startReview(i) } label: { tile(i) }.buttonStyle(.plain)
+                    }
+                }
+                legend
+            }
+            .cardStyle()
+
+            if allViewed {
+                Button("Go to dashboard") {
+                    reportComplete()
+                    dismiss()
+                }
+                .buttonStyle(PrimaryButtonStyle())
+            } else {
+                Button(viewed.isEmpty ? "Start review" : "Continue review") {
+                    startReview(firstUnviewed())
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                Text("Review every question — right and wrong — to finish.")
+                    .font(Theme.font(13, .semibold)).foregroundStyle(Theme.muted)
+                    .multilineTextAlignment(.center)
+            }
+        }
+    }
+
+    private func tile(_ i: Int) -> some View {
+        let c = verdictColor(verdict(i))
+        let seen = viewed.contains(i)
+        return VStack(spacing: 6) {
+            Text("\(i + 1)").font(Theme.font(22, .heavy)).foregroundStyle(c)
+            ZStack {
+                RoundedRectangle(cornerRadius: 5).stroke(c, lineWidth: 2)
+                    .frame(width: 17, height: 17).opacity(seen ? 1 : 0.5)
+                if seen {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10, weight: .black)).foregroundStyle(c)
+                }
+            }
         }
         .frame(maxWidth: .infinity)
-        .cardStyle()
+        .aspectRatio(1, contentMode: .fit)
+        .background(RoundedRectangle(cornerRadius: 16).fill(c.opacity(0.15)))
     }
 
-    private var pager: some View {
-        HStack {
-            Button {
-                if reviewPage > 0 { reviewPage -= 1 }
-            } label: {
-                Text("← Back")
-                    .font(Theme.font(15, .bold))
-                    .foregroundStyle(reviewPage == 0 ? Theme.muted : Theme.accent)
-            }
-            .buttonStyle(.plain)
-            .disabled(reviewPage == 0)
-            Spacer()
-            Text("Page \(reviewPage + 1) of \(pageCount)")
-                .font(Theme.font(13, .bold))
-                .foregroundStyle(Theme.muted)
-            Spacer()
-            Button {
-                if reviewPage < pageCount - 1 { reviewPage += 1 }
-            } label: {
-                Text("Next →")
-                    .font(Theme.font(15, .bold))
-                    .foregroundStyle(reviewPage >= pageCount - 1 ? Theme.muted : Theme.accent)
-            }
-            .buttonStyle(.plain)
-            .disabled(reviewPage >= pageCount - 1)
+    private var legend: some View {
+        HStack(spacing: 16) {
+            legendItem(Theme.green, "Correct")
+            legendItem(Theme.amber, "Shaky reasoning")
+            legendItem(Theme.red, "Missed")
+            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 4)
+    }
+    private func legendItem(_ c: Color, _ label: String) -> some View {
+        HStack(spacing: 6) {
+            RoundedRectangle(cornerRadius: 4).stroke(c, lineWidth: 2).frame(width: 12, height: 12)
+            Text(label).font(Theme.font(13, .bold)).foregroundStyle(c)
+        }
     }
 
-    private func resultCard(_ i: Int) -> some View {
-        let q = items[i]
-        let firstOK = firstChoices[i] == q.correct
-        let secondOK = secondChoices[i] == q.correct
-        let correctLetter = q.choices.indices.contains(q.correct) ? q.choices[q.correct].letter : "?"
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Question \(i + 1) of \(total)")
-                    .font(Theme.font(12, .heavy))
-                    .foregroundStyle(Theme.muted)
-                    .textCase(.uppercase)
-                Spacer()
-                Text(firstOK ? "Correct" : "Missed")
-                    .font(Theme.font(13, .heavy))
-                    .foregroundStyle(firstOK ? Theme.green : Theme.red)
-                    .padding(.horizontal, 12).padding(.vertical, 4)
-                    .background(
-                        Capsule().fill((firstOK ? Theme.green : Theme.red).opacity(0.14)))
-            }
-            Text(q.stem)
-                .font(Theme.font(18, .bold))
-                .foregroundStyle(Theme.text)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 8) {
-                if didSecondPass {
-                    resultPill("second: \(secondOK ? "correct" : "missed")", ok: secondOK)
-                }
-                resultPill("Correct answer: \(correctLetter)", ok: nil)
-            }
-            if !q.explanation.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Why the answer is \(correctLetter)")
-                        .font(Theme.font(13, .heavy))
+    // Per-question walk-through: concept title + AI diagram + minimal text.
+    // "Show question" opens a full-page takeover (question + options).
+    @ViewBuilder
+    private var reviewWalkthrough: some View {
+        if showQ {
+            questionTakeover(items[reviewIdx])
+        } else {
+            reviewCardView(reviewIdx, items[reviewIdx])
+        }
+    }
+
+    private func questionTakeover(_ q: Question) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("QUESTION \(reviewIdx + 1) OF \(total)")
+                .font(Theme.font(13, .heavy)).foregroundStyle(Theme.muted)
+            MarkdownContent(text: q.stem, size: 20, weight: .bold)
+            ForEach(Array(q.choices.enumerated()), id: \.element.id) { idx, choice in
+                let isCorrect = idx == q.correct
+                HStack(spacing: 14) {
+                    Text(choice.letter).font(Theme.font(16, .bold))
+                        .foregroundStyle(isCorrect ? .white : Theme.text)
+                        .frame(width: 32, height: 32)
+                        .background(
+                            RoundedRectangle(cornerRadius: 9)
+                                .fill(isCorrect ? Theme.green : Theme.surface2))
+                    Text(mcatMarkdownAttr(choice.text)).font(Theme.font(18))
                         .foregroundStyle(Theme.text)
-                    Text(q.explanation)
-                        .font(Theme.font(16))
-                        .foregroundStyle(Theme.text)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 12).fill(Theme.surface2))
+                .padding(16)
+                .background(
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(isCorrect ? Theme.green.opacity(0.12) : Theme.surface))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(isCorrect ? Theme.green : Theme.border, lineWidth: 1.5))
             }
-            if aiActive && didSecondPass {
-                aiFeedbackView(i)
-            }
+            Button("← Back to feedback") { showQ = false }
+                .buttonStyle(PrimaryButtonStyle())
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .cardStyle()
     }
 
-    /// Personalized AI feedback on the student's second-pass argument, grounded
-    /// in the official explanation. Shows a "reviewing…" placeholder while the
-    /// grader runs, and nothing if AI was unreachable (fail-safe).
-    @ViewBuilder
-    private func aiFeedbackView(_ i: Int) -> some View {
-        if let fb = aiFeedback[i] {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    Text(labelText(fb.verdict))
-                        .font(Theme.font(11, .heavy))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 9).padding(.vertical, 3)
-                        .background(Capsule().fill(verdictColor(fb.verdict)))
-                    Text("Coach feedback on your reasoning")
-                        .font(Theme.font(12, .bold))
-                        .foregroundStyle(Theme.accent)
+    private func reviewCardView(_ i: Int, _ q: Question) -> some View {
+        let v = verdict(i)
+        let correctLetter = q.choices.indices.contains(q.correct) ? q.choices[q.correct].letter : "?"
+        let card = cards[i]
+        return VStack(spacing: 14) {
+            HStack(spacing: 6) {
+                ForEach(items.indices, id: \.self) { j in
+                    Capsule().fill(verdictColor(verdict(j)))
+                        .frame(width: 26, height: j == reviewIdx ? 11 : 8)
+                        .opacity(j == reviewIdx ? 1 : 0.55)
+                        .onTapGesture { startReview(j) }
                 }
-                if !fb.feedback.isEmpty {
-                    Text(fb.feedback)
-                        .font(Theme.font(14))
-                        .foregroundStyle(Theme.text)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if !fb.keyPoint.isEmpty {
-                    (Text("Key point: ").font(Theme.font(13, .bold))
-                        + Text(fb.keyPoint).font(Theme.font(13)))
-                        .foregroundStyle(Theme.text)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Text("Source: \(fb.source)")
-                    .font(Theme.font(12)).italic()
-                    .foregroundStyle(Theme.muted)
             }
-            .padding(12)
+
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 10) {
+                    Text(verdictText(v))
+                        .font(Theme.font(13, .heavy)).foregroundStyle(verdictColor(v))
+                        .padding(.horizontal, 12).padding(.vertical, 4)
+                        .background(Capsule().fill(verdictColor(v).opacity(0.14)))
+                    Text("\(reviewIdx + 1) / \(total)")
+                        .font(Theme.font(13, .bold)).foregroundStyle(Theme.muted)
+                    Spacer()
+                    MascotView(size: 40, mood: v == .correct ? .happy : .neutral)
+                }
+
+                if let title = card?.title, !title.isEmpty {
+                    Text(title).font(Theme.font(21, .heavy)).foregroundStyle(Theme.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if aiActive {
+                    if let svg = card?.svg, !svg.isEmpty {
+                        SVGWebView(
+                            svg: svg,
+                            textColor: app.darkMode ? "#E6E8F0" : "#1F2340"
+                        )
+                        .frame(height: 210)
+                        .background(RoundedRectangle(cornerRadius: 16).fill(Theme.surface2))
+                    } else if cardLoading.contains(i) {
+                        GeneratingDots()
+                    }
+                }
+
+                resultPill("Answer \(correctLetter)", ok: nil)
+                    .frame(maxWidth: .infinity)
+
+                if !keyText(i).isEmpty {
+                    Text(mcatMarkdownAttr(keyText(i)))
+                        .font(Theme.font(18)).foregroundStyle(Theme.text)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Button("Show question") { showQ = true }
+                    .font(Theme.font(13, .bold)).foregroundStyle(Theme.muted)
+                    .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity)
+
+                Text(sourceText(i))
+                    .font(Theme.font(11)).italic().foregroundStyle(Theme.muted)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+            }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 12).fill(Theme.accent.opacity(0.07)))
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.accent.opacity(0.22), lineWidth: 1))
-        } else if aiGrading {
-            HStack(spacing: 8) {
-                ProgressView().controlSize(.small)
-                Text("Your coach is reviewing your reasoning…")
-                    .font(Theme.font(13, .semibold))
-                    .foregroundStyle(Theme.muted)
+            .cardStyle()
+
+            HStack(spacing: 10) {
+                Button("← Back") { reviewGo(-1) }
+                    .buttonStyle(SecondaryButtonStyle())
+                    .disabled(reviewIdx == 0).opacity(reviewIdx == 0 ? 0.5 : 1)
+                if reviewIdx < total - 1 {
+                    Button("Next →") { reviewGo(1) }.buttonStyle(PrimaryButtonStyle())
+                } else if allViewed {
+                    Button("Done") {
+                        reportComplete()
+                        dismiss()
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                } else {
+                    Button("Review remaining") { startReview(firstUnviewed()) }
+                        .buttonStyle(PrimaryButtonStyle())
+                }
             }
+
+            Button("← All questions") { reviewMode = false }
+                .font(Theme.font(13, .bold)).foregroundStyle(Theme.muted).buttonStyle(.plain)
         }
     }
 
-    private func labelText(_ verdict: String) -> String {
-        verdict.replacingOccurrences(of: "_", with: " ")
+    private func startReview(_ i: Int) {
+        reviewMode = true
+        reviewIdx = i
+        showQ = false
+        viewed.insert(i)
+        loadCard(i)
     }
-
-    private func verdictColor(_ verdict: String) -> Color {
-        switch verdict {
-        case "sound": return Theme.green
-        case "partially_sound": return Theme.amber
-        case "flawed": return Theme.red
-        default: return Theme.muted
+    private func reviewGo(_ delta: Int) {
+        let next = reviewIdx + delta
+        guard next >= 0, next < total else { return }
+        reviewIdx = next
+        showQ = false
+        viewed.insert(next)
+        loadCard(next)
+    }
+    private func loadCard(_ i: Int) {
+        guard aiActive, cards[i] == nil, !cardLoading.contains(i) else { return }
+        cardLoading.insert(i)
+        let q = items[i]
+        Task {
+            let card = await AIClient.conceptCard(question: q.stem, explanation: q.explanation)
+            await MainActor.run {
+                cards[i] = ConceptCard(title: card.title, svg: card.svg)
+                cardLoading.remove(i)
+            }
         }
     }
 
@@ -605,11 +732,12 @@ struct QuestionRunnerView: View {
 
     private func submitFirst() {
         firstChoices[idx] = selected
+        firstConfidence[idx] = confidence
         if timeLeft < 0 { slowCount += 1 }  // ran past the limit (pacing signal)
         if idx + 1 < total {
             idx += 1
-            selected = nil
-            confidence = nil
+            selected = firstChoices[idx]  // restore if revisiting after a Back
+            confidence = firstConfidence[idx]
             resetTimer()
         } else {
             finishFirstPass()
